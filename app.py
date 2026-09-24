@@ -2931,7 +2931,12 @@ with tab_ptit_report:
         total_gas = grand_total[0]
         total_cond = grand_total[1]
         total_crude = grand_total[2]
-        total_boed = (total_gas * 1000 / 5.615) + total_cond + total_crude
+        
+        # Calculate official BOED from DMF data if present, otherwise standard conversion
+        if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_month_data.columns:
+            total_boed = float(df_month_data['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum()) + float(fang_val if fang_val > 0 else 0)
+        else:
+            total_boed = (total_gas * 1000 / 5.615) + total_cond + total_crude
 
         # ----------------------------------------------------
         # Executive Bento Metric Ribbon (Key Production Highlights)
@@ -2970,9 +2975,8 @@ with tab_ptit_report:
         }
         bt = bento_themes[report_theme_key]
 
-        st.markdown(f"""
+        html_bento = f"""
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 15px 0 20px 0;">
-            <!-- Gas Card -->
             <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 11px; font-weight: 700; color: #0284C7; letter-spacing: 0.05em; text-transform: uppercase;">🔵 ก๊าซธรรมชาติ (Gas)</span>
@@ -2985,8 +2989,6 @@ with tab_ptit_report:
                     Onshore: <b>{onshore_sub[0]:,.1f}</b> • Offshore: <b>{offshore_sub[0]:,.1f}</b>
                 </div>
             </div>
-
-            <!-- Condensate Card -->
             <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 11px; font-weight: 700; color: #D97706; letter-spacing: 0.05em; text-transform: uppercase;">🟠 ก๊าซธรรมชาติเหลว (Cond)</span>
@@ -2999,8 +3001,6 @@ with tab_ptit_report:
                     อ่าวไทย (Offshore Gulf of Thailand 100%)
                 </div>
             </div>
-
-            <!-- Crude Oil Card -->
             <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">🛢️ น้ำมันดิบ (Crude Oil)</span>
@@ -3013,22 +3013,26 @@ with tab_ptit_report:
                     Onshore: <b>{onshore_sub[2]:,.1f}</b> • Offshore: <b>{offshore_sub[2]:,.1f}</b>
                 </div>
             </div>
-
-            <!-- Total BOED Executive Card -->
             <div style="background: {bt['boed_bg']}; border: {bt['halo_border']}; border-radius: 14px; padding: 14px 18px; box-shadow: {bt['halo_shadow']};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 11px; font-weight: 800; color: {bt['tag_fg']}; letter-spacing: 0.06em; text-transform: uppercase;">⚡ ผลผลิตเทียบเท่าน้ำมันดิบ</span>
+                    <span style="font-size: 11px; font-weight: 800; color: {bt['tag_fg']}; letter-spacing: 0.06em; text-transform: uppercase;">⚡ รวมเทียบเท่าน้ำมันดิบ</span>
                     <span style="background: {bt['tag_bg']}; color: {bt['tag_fg']}; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;">BOED</span>
                 </div>
                 <div style="font-size: 24px; font-weight: 900; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
                     {total_boed:,.1f}
                 </div>
                 <div style="font-size: 11px; color: #78716C; margin-top: 5px;">
-                    รวมทุกผลิตภัณฑ์ (Gas 5.615 kcf = 1 bbl)
+                    รวมเทียบเท่าตามค่าความร้อนจริง (DMF Standard)
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        clean_bento = re.sub(r'<!--.*?-->', '', html_bento, flags=re.DOTALL)
+        clean_bento = "\n".join(line.strip() for line in clean_bento.splitlines() if line.strip())
+        if hasattr(st, 'html'):
+            st.html(clean_bento)
+        else:
+            st.markdown(clean_bento, unsafe_allow_html=True)
 
         # Action Toolbar
         btn_c1, btn_c2 = st.columns([2.5, 3.5])
@@ -3046,6 +3050,70 @@ with tab_ptit_report:
             )
         with btn_c2:
             st.caption(f"✨ ตารางด้านล่างแสดงผลในรูปแบบ **{selected_theme_label.split('(')[0].strip()}** รองรับการพิมพ์และการบันทึกเป็น PDF สไตล์ Executive Letterhead (กด `Ctrl + P`)")
+
+        # Units Reference and Verification Expander
+        with st.expander("📐 ตารางทบทวนและตรวจสอบหน่วยวัดปิโตรเลียม (Petroleum Units Audit Reference)", expanded=False):
+            st.markdown("""
+            <div style="background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(203, 213, 225, 0.8); border-radius: 12px; padding: 14px; font-size: 13px; overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-family: 'Hanken Grotesk', sans-serif;">
+                    <thead>
+                        <tr style="background: #F8FAFC; border-bottom: 2px solid #CBD5E1; color: #0F172A; font-size: 12.5px;">
+                            <th style="padding: 8px 12px; text-align: left;">หมวดรายงาน</th>
+                            <th style="padding: 8px 12px; text-align: left;">ผลิตภัณฑ์</th>
+                            <th style="padding: 8px 12px; text-align: left;">หน่วยหลัก (Primary Unit)</th>
+                            <th style="padding: 8px 12px; text-align: left;">หน่วยเทียบเท่า / หน่วยราคา</th>
+                            <th style="padding: 8px 12px; text-align: left;">คำอธิบายและนิยามทางสถิติ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 12px; font-weight: 700; color: #0284C7;" rowspan="3">🏭 การผลิตปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Production Report)</span></td>
+                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (Natural Gas)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCFD</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                            <td style="padding: 8px 12px; color: #475569;">ล้านลูกบาศก์ฟุตต่อวัน (วัดทางกายภาพ) เทียบเท่าบาร์เรล/วันตามค่าความร้อนเฉพาะของแต่ละแหล่ง</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติเหลว</b> (Condensate)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                            <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (ไฮโดรคาร์บอนเหลวเบาที่แยกได้จากก๊าซธรรมชาติในอ่าวไทย)</td>
+                        </tr>
+                        <tr style="border-bottom: 2px solid #CBD5E1;">
+                            <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                            <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (รวมแหล่งสิริกิติ์, อ่าวไทย, และแหล่งฝาง กรมการพลังงานทหาร DEDP)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 12px; font-weight: 700; color: #D97706;" rowspan="4">💰 การจำหน่ายปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Sales & Fiscal Report)</span></td>
+                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (2 รูปแบบ)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCF</span> (ปริมาตร)<br><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-top: 3px; display: inline-block;">MMBTU</span> (ความร้อน)</td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/MMBTU</b><br>(BTU/scf)</td>
+                            <td style="padding: 8px 12px; color: #475569;">ปริมาตรใช้วัดทางวิศวกรรม ส่วนความร้อนใช้คิดเงินตามสัญญา GSA และคิดราคาปากหลุม</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 12px;"><b>คอนเดนเสท</b> (Condensate)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
+                            <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
+                            <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 12px;"><b>ก๊าซปิโตรเลียมเหลว</b> (LPG)</td>
+                            <td style="padding: 8px 12px;"><span style="background: rgba(147, 51, 234, 0.12); color: #7E22CE; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">กิโลกรัม (kg)</span></td>
+                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/กิโลกรัม</b></td>
+                            <td style="padding: 8px 12px; color: #475569;">กิโลกรัมที่จำหน่ายจากแหล่งสิริกิติ์ และราคาเฉลี่ยต่อกิโลกรัม</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
 
         # HTML Table Generator
         def fmt(val, is_bpd=False):
@@ -3345,7 +3413,6 @@ with tab_ptit_report:
         </style>
 
         <div class="ptit-luxury-wrapper">
-            <!-- Executive Masthead Banner -->
             <div class="ptit-masthead">
                 <div>
                     <div class="ptit-masthead-org">PETROLEUM INSTITUTE OF THAILAND</div>
@@ -3358,7 +3425,6 @@ with tab_ptit_report:
                 </div>
             </div>
 
-            <!-- Table Container -->
             <div class="ptit-table-responsive">
                 <table class="ptit-luxury-table">
                     <thead>
@@ -3383,7 +3449,6 @@ with tab_ptit_report:
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Onshore Section Ribbon -->
                         <tr class="tr-section">
                             <td style="padding-left: 18px !important;">
                                 <span class="sec-badge">🏞️ ONSHORE BASIN</span>
@@ -3406,7 +3471,6 @@ with tab_ptit_report:
             """
 
         html_table += f"""
-                        <!-- Offshore Section Ribbon -->
                         <tr class="tr-section">
                             <td style="padding-left: 18px !important;">
                                 <span class="sec-badge">🌊 OFFSHORE GULF OF THAILAND</span>
@@ -3429,7 +3493,6 @@ with tab_ptit_report:
             """
 
         html_table += f"""
-                        <!-- Grand Total Row -->
                         <tr class="tr-total">
                             <td style="text-align: center; font-family: 'Manrope', sans-serif;">Total Domestic Production</td>
                             <td class="num-cell tot-num">{fmt(grand_total[0])}</td>
@@ -3440,7 +3503,6 @@ with tab_ptit_report:
                 </table>
             </div>
 
-            <!-- Footnote & Authority Citations -->
             <div class="ptit-footnote-box">
                 <div>
                     <div><b>Note:</b> &nbsp; Data shown as "0.0" indicates production figure less than 0.05.</div>
@@ -3454,7 +3516,8 @@ with tab_ptit_report:
         </div>
         """
 
-        clean_html = "\n".join(line.strip() for line in html_table.splitlines())
+        clean_html = re.sub(r'<!--.*?-->', '', html_table, flags=re.DOTALL)
+        clean_html = "\n".join(line.strip() for line in clean_html.splitlines() if line.strip())
         if hasattr(st, 'html'):
             st.html(clean_html)
         else:
