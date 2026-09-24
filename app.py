@@ -2,6 +2,7 @@ import os
 import re
 import glob
 import io
+import json
 import pandas as pd
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -263,6 +264,102 @@ def load_sale_master_mapping():
 
 def save_sale_master_mapping(df):
     df.to_excel(SALE_MASTER_FILE, index=False)
+
+# ----------------------------------------------------
+# DEDP Fang Crude Oil Master Storage & Functions
+# ----------------------------------------------------
+FANG_MASTER_FILE = os.path.join(BASE_DIR, "fang_production_master.json")
+
+def load_fang_master():
+    """โหลดข้อมูลค่าน้ำมันดิบแหล่งฝาง (Fang - DEDP) รายเดือนจาก JSON หากไม่มีให้สร้างค่าเริ่มต้น"""
+    default_data = {
+        "2569": {
+            "มกราคม": 0.0, "กุมภาพันธ์": 0.0, "มีนาคม": 0.0, "เมษายน": 0.0,
+            "พฤษภาคม": 0.0, "มิถุนายน": 610.4, "กรกฎาคม": 0.0, "สิงหาคม": 0.0,
+            "กันยายน": 0.0, "ตุลาคม": 0.0, "พฤศจิกายน": 0.0, "ธันวาคม": 0.0
+        }
+    }
+    if os.path.exists(FANG_MASTER_FILE):
+        try:
+            with open(FANG_MASTER_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    save_fang_master(default_data)
+    return default_data
+
+def save_fang_master(data):
+    """บันทึกข้อมูลค่าน้ำมันดิบแหล่งฝางลง JSON"""
+    try:
+        with open(FANG_MASTER_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึกข้อมูลแหล่งฝาง: {e}")
+
+def get_fang_value(year_str, month_str):
+    """ดึงค่าน้ำมันดิบแหล่งฝางสำหรับปีและเดือนที่กำหนด"""
+    data = load_fang_master()
+    y_data = data.get(str(year_str), {})
+    return float(y_data.get(str(month_str), 0.0))
+
+def set_fang_value(year_str, month_str, val):
+    """อัปเดตและบันทึกค่าน้ำมันดิบแหล่งฝางสำหรับปีและเดือนที่กำหนด"""
+    data = load_fang_master()
+    y_str = str(year_str)
+    if y_str not in data:
+        data[y_str] = {}
+    data[y_str][str(month_str)] = float(val)
+    save_fang_master(data)
+
+def inject_fang_to_dataframe(df_source):
+    """ผนวกข้อมูลค่าน้ำมันดิบแหล่งฝาง (DEDP) จากฐานข้อมูล Master เข้ากับ DataFrame เพื่อให้แสดงผลครบถ้วนทุกรายงานและแดชบอร์ด"""
+    if df_source is None or df_source.empty:
+        return df_source
+
+    df_clean = df_source[df_source.get('ผู้ดำเนินการ', '') != 'Defence Energy Department'].copy()
+    fang_data = load_fang_master()
+    fang_rows = []
+
+    years_in_data = [str(y) for y in df_clean['ปี'].dropna().unique().tolist()] if 'ปี' in df_clean.columns else ['2569']
+
+    for y_str in years_in_data:
+        y_fang = fang_data.get(y_str, {})
+        for m_name, m_ord in MONTH_ORDER.items():
+            val = float(y_fang.get(m_name, 0.0))
+            if val > 0:
+                y_val = int(y_str) if y_str.isdigit() else y_str
+                fang_rows.append({
+                    'ปี': y_val,
+                    'เดือน': m_name,
+                    'ลำดับเดือน': m_ord,
+                    'พื้นที่': 'บนบก',
+                    'PTIT_Region': 'Onshore',
+                    'PTIT_Operator_Field': 'Defence Energy Department / Fang',
+                    'PTIT_Order': 13,
+                    'ผู้ดำเนินการ': 'Defence Energy Department',
+                    'แอ่งปิโตรเลียม': 'Fang Basin',
+                    'ประเภทสัญญา': 'DEDP',
+                    'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 0.0,
+                    'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 0.0,
+                    'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 0.0,
+                    'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 0.0,
+                    'น้ำมันดิบ (บาร์เรล/วัน)': val,
+                    'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': val,
+                    'จำนวนวันที่ผลิต': 30,
+                    'หมายเหตุ': 'ข้อมูลจากกรมการพลังงานทหาร (DEDP)',
+                    'แปลง_ไฟล์ดิบ': 'Fang',
+                    'แหล่ง_ไฟล์ดิบ': 'Fang',
+                    'Lookup_Key': 'บนบก_Fang_Fang',
+                    'ไฟล์ที่มา': 'DEDP_Fang_Manual_Entry'
+                })
+
+    if fang_rows:
+        df_fang = pd.DataFrame(fang_rows)
+        for col in df_clean.columns:
+            if col not in df_fang.columns:
+                df_fang[col] = None
+        return pd.concat([df_clean, df_fang], ignore_index=True)
+    return df_clean
 
 def parse_sales_file(file_input, filename_label):
     wb = openpyxl.load_workbook(file_input, data_only=True)
@@ -616,6 +713,7 @@ def process_production_dfs(dfs, save_to_disk=False):
         value_name='ปริมาณ'
     )
 
+    df_flat_wide = inject_fang_to_dataframe(df_flat_wide)
     st.session_state['df_flat_wide'] = df_flat_wide
     st.session_state['df_flat_long'] = df_flat_long
 
@@ -734,7 +832,8 @@ def run_auto_sync_sales(online_items):
 
 if 'df_flat_wide' not in st.session_state and os.path.exists(DEFAULT_OUTPUT_FILE):
     try:
-        st.session_state['df_flat_wide'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Wide')
+        df_loaded_prod = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Wide')
+        st.session_state['df_flat_wide'] = inject_fang_to_dataframe(df_loaded_prod)
         st.session_state['df_flat_long'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Long_Unpivoted')
     except Exception:
         pass
@@ -1774,28 +1873,107 @@ if is_admin and tab_convert is not None:
 # TAB 2: MASTER LIST MANAGEMENT (ADMIN ONLY)
 # ====================================================
 def render_production_master():
-    st.subheader("🏷️ จัดการตาราง Master Data Model & Mapping")
-    st.caption("คุณสามารถดับเบิลคลิกแก้ไขข้อมูลในตารางด้านล่างนี้ได้โดยตรงเหมือนใช้ Excel เมื่อแก้ไขเสร็จแล้วให้กดปุ่ม 'บันทึก Master List'")
+    st.subheader("🏷️ จัดการ Master Data Model & ฐานข้อมูลแหล่งฝาง (Admin)")
+    st.caption("จัดการโครงสร้างข้อมูล Master Mapping สำหรับ DMF และบันทึกค่าน้ำมันดิบแหล่งฝาง (DEDP) ประจำแต่ละเดือน")
 
-    df_master_current = load_master_mapping()
+    subtab_dmf_m, subtab_fang_m = st.tabs([
+        "📑 1. Master Mapping กรมเชื้อเพลิงฯ (DMF)",
+        "🛢️ 2. ค่าน้ำมันดิบ แหล่งฝาง รายเดือน (Fang - DEDP)"
+    ])
 
-    edited_master = st.data_editor(
-        df_master_current,
-        num_rows="dynamic",
-        use_container_width=True,
-        height=500,
-        key="master_editor"
-    )
+    with subtab_dmf_m:
+        st.markdown("##### 📋 ตาราง Master Mapping สำหรับเชื่อมโยงข้อมูล DMF")
+        st.caption("คุณสามารถดับเบิลคลิกแก้ไขข้อมูลในตารางด้านล่างนี้ได้โดยตรงเหมือนใช้ Excel เมื่อแก้ไขเสร็จแล้วให้กดปุ่ม 'บันทึก Master List'")
 
-    col_btn_save, col_info = st.columns([1, 3])
-    with col_btn_save:
-        if st.button("💾 บันทึก Master List", type="primary", use_container_width=True):
-            save_master_mapping(edited_master)
-            st.success("บันทึกข้อมูล Master Data Model เรียบร้อยแล้ว!")
-            st.rerun()
+        df_master_current = load_master_mapping()
 
-    with col_info:
-        st.caption(f"📁 ไฟล์ Master ถูกจัดเก็บไว้ที่: `{os.path.basename(MASTER_FILE)}` (เปิดแก้ไขด้วย Excel ได้เช่นกัน)")
+        edited_master = st.data_editor(
+            df_master_current,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=500,
+            key="master_editor"
+        )
+
+        col_btn_save, col_info = st.columns([1, 3])
+        with col_btn_save:
+            if st.button("💾 บันทึก Master List", type="primary", use_container_width=True):
+                save_master_mapping(edited_master)
+                st.success("บันทึกข้อมูล Master Data Model เรียบร้อยแล้ว!")
+                st.rerun()
+
+        with col_info:
+            st.caption(f"📁 ไฟล์ Master ถูกจัดเก็บไว้ที่: `{os.path.basename(MASTER_FILE)}` (เปิดแก้ไขด้วย Excel ได้เช่นกัน)")
+
+    with subtab_fang_m:
+        st.markdown("##### 🛢️ กรอกและจัดการค่าน้ำมันดิบ แหล่งฝาง (Fang - DEDP) รายเดือน")
+        st.markdown("""
+        <div style="background: rgba(224, 242, 254, 0.6); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 12px; padding: 12px 18px; margin-bottom: 16px;">
+            <b style="color: #0369A1; font-size: 13.5px;">💡 คำชี้แจงสำหรับผู้ดูแลระบบ (Admin):</b><br/>
+            <span style="font-size: 12.5px; color: #334155; line-height: 1.6;">
+            • ข้อมูลการผลิตน้ำมันดิบของ <b>แหล่งฝาง (สังกัดกรมการพลังงานทหาร - DEDP)</b> ไม่ได้อยู่ในรายงานของกรมเชื้อเพลิงธรรมชาติ (DMF)<br/>
+            • คุณสามารถกรอกค่าน้ำมันดิบ (บาร์เรล/วัน - BPD) ของแต่ละเดือนในตารางด้านล่างนี้ และกดปุ่ม <b>"💾 บันทึกตารางค่าน้ำมันดิบแหล่งฝาง"</b><br/>
+            • ข้อมูลที่บันทึกจะถูกนำไปแสดงใน <b>รายงานรายเดือนของแต่ละเดือน (PTIT Domestic Production Report)</b> และรวมในแดชบอร์ดโดยอัตโนมัติ
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        fang_all = load_fang_master()
+        avail_years = sorted(list(fang_all.keys()))
+        if not avail_years:
+            avail_years = ["2569"]
+
+        col_fy, col_fblank = st.columns([1.5, 3])
+        with col_fy:
+            sel_f_year = st.selectbox("เลือกปี พ.ศ.:", avail_years, index=0, key="sel_fang_year_master")
+
+        y_dict = fang_all.get(sel_f_year, {})
+
+        fang_records = []
+        for m in THAI_MONTHS:
+            val = float(y_dict.get(m, 0.0))
+            status_txt = "✅ มีข้อมูลแล้ว" if val > 0 else "⏳ ยังไม่มีข้อมูล (0.0)"
+            fang_records.append({
+                "ลำดับ": MONTH_ORDER.get(m, 99),
+                "เดือน": m,
+                "ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)": val,
+                "สถานะ": status_txt
+            })
+        df_fang_edit = pd.DataFrame(fang_records)
+
+        edited_fang = st.data_editor(
+            df_fang_edit,
+            column_config={
+                "ลำดับ": st.column_config.NumberColumn("ลำดับ", disabled=True, width="small"),
+                "เดือน": st.column_config.TextColumn("เดือน", disabled=True, width="medium"),
+                "ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)": st.column_config.NumberColumn(
+                    "ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.1f"
+                ),
+                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium")
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="fang_data_editor"
+        )
+
+        col_f_btn, col_f_info = st.columns([1.5, 3])
+        with col_f_btn:
+            if st.button("💾 บันทึกตารางค่าน้ำมันดิบแหล่งฝาง", type="primary", use_container_width=True, key="btn_save_fang_table"):
+                updated_dict = {}
+                for _, r in edited_fang.iterrows():
+                    updated_dict[r["เดือน"]] = float(r["ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)"])
+                fang_all[sel_f_year] = updated_dict
+                save_fang_master(fang_all)
+                if 'df_flat_wide' in st.session_state:
+                    st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
+                st.success(f"🎉 บันทึกค่าน้ำมันดิบแหล่งฝางประจำปี {sel_f_year} เรียบร้อยแล้ว! ข้อมูลจะปรากฏในรายงานรายเดือนทันที")
+                st.rerun()
+
+        with col_f_info:
+            st.caption(f"📁 บันทึกข้อมูลที่: `fang_production_master.json` (อัปเดตรายงานทุกเดือนแบบ Real-time)")
 
 if is_admin and tab_master is not None:
     with tab_master:
@@ -2243,16 +2421,47 @@ with tab_ptit_report:
         # Filter data for chosen month
         df_month_data = df_all_data[(df_all_data['เดือน'] == sel_month) & (df_all_data['ปี'].astype(str) == sel_year)].copy()
 
-        # DEDP Fang Input & Toggle for Zero Fields
+        # DEDP Fang Value Retrieval & Role-based UI
+        saved_fang_val = get_fang_value(sel_year, sel_month)
+
         with sel_col2:
-            default_fang = 610.4 if sel_month == 'มิถุนายน' else 0.0
-            fang_val = st.number_input(
-                "ค่าน้ำมันดิบ แหล่งฝาง (Fang - DEDP) [BPD]:",
-                min_value=0.0,
-                value=default_fang,
-                step=10.0,
-                help="ข้อมูลแหล่งฝางสังกัดกรมการพลังงานทหาร (DEDP) ซึ่งไม่ได้อยู่ในรายงานของกรมเชื้อเพลิงฯ"
-            )
+            if is_admin:
+                cf_in, cf_save = st.columns([2.2, 1.2])
+                with cf_in:
+                    fang_val = st.number_input(
+                        f"🛢️ ค่าน้ำมันดิบ แหล่งฝาง ({sel_month}) [BPD]:",
+                        min_value=0.0,
+                        value=float(saved_fang_val),
+                        step=10.0,
+                        key=f"input_fang_{sel_month}_{sel_year}",
+                        help="ข้อมูลแหล่งฝางสังกัดกรมการพลังงานทหาร (DEDP) ผู้ดูแลระบบสามารถกรอกและกดบันทึกได้ทันที"
+                    )
+                with cf_save:
+                    st.write("")
+                    st.write("")
+                    if st.button("💾 บันทึก", key=f"btn_save_fang_single_{sel_month}_{sel_year}", help="บันทึกค่าน้ำมันดิบแหล่งฝางสำหรับเดือนนี้"):
+                        set_fang_value(sel_year, sel_month, fang_val)
+                        if 'df_flat_wide' in st.session_state:
+                            st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
+                        st.toast(f"✅ บันทึกค่าน้ำมันดิบแหล่งฝาง ({sel_month} {sel_year}): {fang_val:,.1f} BPD เรียบร้อยแล้ว")
+                        st.rerun()
+            else:
+                fang_val = saved_fang_val
+                if fang_val > 0:
+                    st.markdown(f"""
+                    <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase;">🛢️ แหล่งฝาง (DEDP):</span>
+                        <span style="font-size: 15px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin-left: 6px;">{fang_val:,.1f} BPD</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
+                        <span style="font-size: 11px; font-weight: 600; color: #64748B;">🛢️ แหล่งฝาง (DEDP):</span>
+                        <span style="font-size: 13px; font-weight: 600; color: #94A3B8; margin-left: 6px;">0.0 BPD (ไม่มีการผลิต / รอรายงาน)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
         with sel_col3:
             st.write("")
             st.write("")
@@ -2273,17 +2482,34 @@ with tab_ptit_report:
             'PTIT_Order': 'Order'
         })
 
-        # Append Fang if > 0
+        # Append or update Fang in df_agg
+        has_fang_row = ('Operator_Field' in df_agg.columns and (df_agg['Operator_Field'] == 'Defence Energy Department / Fang').any())
         if fang_val > 0:
-            df_fang_row = pd.DataFrame([{
-                'Region': 'Onshore',
-                'Operator_Field': 'Defence Energy Department / Fang',
-                'Order': 13,
-                'Gas': 0.0,
-                'Cond': 0.0,
-                'Crude': float(fang_val)
-            }])
-            df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+            if not has_fang_row:
+                df_fang_row = pd.DataFrame([{
+                    'Region': 'Onshore',
+                    'Operator_Field': 'Defence Energy Department / Fang',
+                    'Order': 13,
+                    'Gas': 0.0,
+                    'Cond': 0.0,
+                    'Crude': float(fang_val)
+                }])
+                df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+            else:
+                df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = float(fang_val)
+        else:
+            if has_fang_row:
+                df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = 0.0
+            elif show_zero_fields:
+                df_fang_row = pd.DataFrame([{
+                    'Region': 'Onshore',
+                    'Operator_Field': 'Defence Energy Department / Fang',
+                    'Order': 13,
+                    'Gas': 0.0,
+                    'Cond': 0.0,
+                    'Crude': 0.0
+                }])
+                df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
 
         if not show_zero_fields:
             df_agg = df_agg[(df_agg['Gas'] >= 0.001) | (df_agg['Cond'] >= 0.001) | (df_agg['Crude'] >= 0.001)].reset_index(drop=True)
