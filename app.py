@@ -1,0 +1,2470 @@
+import os
+import re
+import glob
+import io
+import pandas as pd
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+import dmf_live_stream as dmf
+
+# ----------------------------------------------------
+# Page Configuration
+# ----------------------------------------------------
+st.set_page_config(
+    page_title="PTIT Focus - ระบบแปลงข้อมูลการผลิตปิโตรเลียม",
+    page_icon="🛢️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ----------------------------------------------------
+# Design System: Siam Hydrocarbon Intelligence (Crystal Aqua Glass)
+# ----------------------------------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@600;700;800&display=swap');
+
+/* Global Font & Canvas Base Background */
+html, body, [class*="css"], .stApp {
+    font-family: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background: radial-gradient(135% 100% at 50% 0%, #E0F2FE 0%, #F0F9FF 35%, #F8FAFC 70%, #EFF6FF 100%) !important;
+    background-attachment: fixed !important;
+    color: #0F172A !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-weight: 700 !important;
+    color: #0F172A !important;
+    letter-spacing: -0.015em !important;
+}
+
+/* Glass Sidebar */
+[data-testid="stSidebar"] {
+    background: rgba(255, 255, 255, 0.76) !important;
+    backdrop-filter: blur(20px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+    border-right: 1px solid rgba(186, 230, 253, 0.5) !important;
+    box-shadow: 4px 0 24px rgba(2, 62, 138, 0.04) !important;
+}
+
+/* Vitreous Glass Panels */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.72) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.85) !important;
+    box-shadow: 
+        0 8px 32px 0 rgba(31, 38, 135, 0.06),
+        0 2px 6px 0 rgba(0, 0, 0, 0.02),
+        inset 0 1px 1px 0 rgba(255, 255, 255, 0.9) !important;
+    border-radius: 18px !important;
+    padding: 20px !important;
+    margin-bottom: 20px !important;
+}
+
+/* Vitreous Metric Cards (st.metric) */
+[data-testid="stMetric"] {
+    background: rgba(255, 255, 255, 0.75) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.9) !important;
+    border-radius: 16px !important;
+    padding: 16px 20px !important;
+    box-shadow: 0 4px 20px rgba(2, 62, 138, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.95) !important;
+}
+
+[data-testid="stMetricLabel"] {
+    font-family: 'Manrope', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: #475569 !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    color: #0F172A !important;
+    font-variant-numeric: tabular-nums !important;
+}
+
+/* Glass Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px !important;
+    background: rgba(224, 242, 254, 0.45) !important;
+    padding: 6px !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(186, 230, 253, 0.6) !important;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 10px !important;
+    padding: 8px 18px !important;
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    color: #334155 !important;
+    background: transparent !important;
+    border: none !important;
+    transition: all 0.2s ease !important;
+}
+
+.stTabs [aria-selected="true"] {
+    background: #0284C7 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
+}
+
+/* Primary Action Buttons */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%) !important;
+    color: #FFFFFF !important;
+    border-radius: 12px !important;
+    border: none !important;
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35) !important;
+    transition: all 0.2s ease !important;
+}
+
+.stButton > button[kind="primary"]:hover {
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Secondary Action Buttons */
+.stButton > button[kind="secondary"] {
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.9) !important;
+    color: #0F172A !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+}
+
+/* Live Pulse Animation */
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(1.2); }
+}
+
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #10B981;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: live-pulse 1.8s infinite ease-in-out;
+    box-shadow: 0 0 8px #10B981;
+}
+
+/* Crisp Clean DataFrames */
+[data-testid="stDataFrame"] {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(186, 230, 253, 0.6) !important;
+    box-shadow: 0 4px 20px rgba(2, 62, 138, 0.03) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MASTER_FILE = os.path.join(BASE_DIR, "master_mapping.xlsx")
+_local_sale = os.path.join(BASE_DIR, "Sale")
+_parent_sale = os.path.normpath(os.path.join(BASE_DIR, "..", "Sale"))
+SALE_DIR = _local_sale if os.path.exists(_local_sale) else _parent_sale
+SALE_MASTER_FILE = os.path.join(BASE_DIR, "sale_master_mapping.xlsx")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+DEFAULT_OUTPUT_FILE = os.path.join(OUTPUT_DIR, "petroleum_production_flat_table.xlsx")
+DEFAULT_SALE_OUTPUT_FILE = os.path.join(OUTPUT_DIR, "petroleum_sale_flat_table.xlsx")
+
+THAI_MONTHS = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+]
+MONTH_ORDER = {m: i+1 for i, m in enumerate(THAI_MONTHS)}
+
+# ----------------------------------------------------
+# Helper Functions & Crystal Aqua Plotly Theme
+# ----------------------------------------------------
+def apply_crystal_aqua_theme(fig):
+    """ตกแต่งกราฟ Plotly ให้มีสไตล์โปร่งแสง คมชัด ตามแบบฉบับ Crystal Aqua Glass"""
+    fig.update_layout(
+        font=dict(family="Manrope, Inter, sans-serif", color="#0F172A"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=45, b=20),
+        xaxis=dict(
+            showgrid=True, gridcolor="rgba(15, 23, 42, 0.05)",
+            linecolor="rgba(15, 23, 42, 0.12)",
+            tickfont=dict(family="Manrope, Inter, sans-serif", size=11, color="#475569")
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor="rgba(15, 23, 42, 0.05)",
+            linecolor="rgba(15, 23, 42, 0.12)",
+            tickfont=dict(family="JetBrains Mono, monospace", size=11, color="#475569")
+        )
+    )
+    return fig
+
+def clean_number(val):
+    if val is None or val == '':
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        clean_str = re.sub(r'[, \t\n]', '', val)
+        try:
+            return float(clean_str)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+def normalize_text(text):
+    if not text:
+        return ''
+    return re.sub(r'\s+', ' ', str(text)).strip()
+
+def get_merged_cell_value(ws, row, col):
+    """ดึงค่าจากเซลล์ที่ถูก Merge ใน Excel ได้ถูกต้อง ไม่รั่วข้ามคอลัมน์"""
+    for rng in ws.merged_cells.ranges:
+        if row >= rng.min_row and row <= rng.max_row and col >= rng.min_col and col <= rng.max_col:
+            return ws.cell(rng.min_row, rng.min_col).value
+    return ws.cell(row, col).value
+
+def load_master_mapping():
+    if os.path.exists(MASTER_FILE):
+        return pd.read_excel(MASTER_FILE)
+    else:
+        cols = [
+            "Lookup_Key", "พื้นที่", "แปลง_ไฟล์ดิบ", "แหล่ง_ไฟล์ดิบ",
+            "PTIT_Region", "PTIT_Operator_Field", "PTIT_Order",
+            "ผู้ดำเนินการ", "แอ่งปิโตรเลียม", "ประเภทสัญญา"
+        ]
+        return pd.DataFrame(columns=cols)
+
+def save_master_mapping(df):
+    df['Lookup_Key'] = df['พื้นที่'].astype(str) + '_' + df['แปลง_ไฟล์ดิบ'].astype(str) + '_' + df['แหล่ง_ไฟล์ดิบ'].astype(str)
+    df.to_excel(MASTER_FILE, index=False)
+
+def load_sale_master_mapping():
+    if os.path.exists(SALE_MASTER_FILE):
+        return pd.read_excel(SALE_MASTER_FILE)
+    else:
+        cols = ["แหล่ง_ไฟล์ดิบ", "พื้นที่", "ผู้ดำเนินการ", "แอ่งปิโตรเลียม", "ประเภทสัญญา", "หมายเหตุ"]
+        return pd.DataFrame(columns=cols)
+
+def save_sale_master_mapping(df):
+    df.to_excel(SALE_MASTER_FILE, index=False)
+
+def parse_sales_file(file_input, filename_label):
+    wb = openpyxl.load_workbook(file_input, data_only=True)
+    ws = wb.active
+
+    row2_val = str(ws.cell(2, 1).value or '')
+    month_name, year_val = '', ''
+    for m in THAI_MONTHS:
+        if m in row2_val:
+            month_name = m
+            break
+    ymatch = re.search(r'(\d{4})', row2_val)
+    if ymatch:
+        year_val = ymatch.group(1)
+
+    current_product = None
+    records = []
+
+    for r in range(4, ws.max_row + 1):
+        c1 = str(ws.cell(r, 1).value or '').strip()
+        c2 = ws.cell(r, 2).value
+        c3 = ws.cell(r, 3).value
+        c4 = ws.cell(r, 4).value
+        c5 = ws.cell(r, 5).value
+
+        if c1 in ['ก๊าซธรรมชาติ', 'ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ']:
+            current_product = c1
+            continue
+
+        if not c1 or c1 in ['แหล่ง', 'รวมทั้งหมด'] or 'ปริมาณ' in str(c2) or 'ล้าน' in str(c2) or 'บาร์เรล' in str(c2):
+            continue
+
+        prod_type = current_product
+        if 'LPG' in c1:
+            prod_type = 'ก๊าซปิโตรเลียมเหลว (LPG)'
+
+        v1 = clean_number(c2)
+        v2 = clean_number(c3) if current_product == 'ก๊าซธรรมชาติ' and 'LPG' not in c1 else None
+        val = clean_number(c4)
+        royalty = clean_number(c5)
+
+        unit_str = ''
+        if prod_type == 'ก๊าซธรรมชาติ':
+            unit_str = 'ล้าน ลบ.ฟุต'
+        elif prod_type in ['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ']:
+            unit_str = 'บาร์เรล'
+        elif prod_type == 'ก๊าซปิโตรเลียมเหลว (LPG)':
+            unit_str = 'กิโลกรัม'
+
+        rec = {
+            'ปี': year_val,
+            'เดือน': month_name,
+            'ลำดับเดือน': MONTH_ORDER.get(month_name, 99),
+            'ประเภทปิโตรเลียม': prod_type,
+            'แหล่ง_ไฟล์ดิบ': c1,
+            'หน่วยปริมาณ': unit_str,
+            'ปริมาณการขาย_หน่วยหลัก': v1,
+            'ปริมาณการขาย_MMBTU': v2,
+            'มูลค่าการขาย_บาท': val,
+            'ค่าภาคหลวง_บาท': royalty,
+            'ไฟล์ที่มา': filename_label
+        }
+        records.append(rec)
+
+    return pd.DataFrame(records)
+
+def parse_excel_file(file_input, filename_label):
+    wb = openpyxl.load_workbook(file_input, data_only=True)
+    ws = wb.active
+
+    # 1. Find Header Row using Anchor keywords
+    header_row_idx = None
+    for r in range(1, min(30, ws.max_row + 1)):
+        row_values = [normalize_text(ws.cell(r, c).value) for c in range(1, ws.max_column + 1)]
+        if any('พื้นที่' in v for v in row_values) and any('แปลง' in v for v in row_values):
+            header_row_idx = r
+            break
+
+    if header_row_idx is None:
+        raise ValueError(f"ไม่พบหัวตารางในไฟล์ {filename_label}")
+
+    # 2. Extract Month & Year from rows above header
+    month_name, year_val = '', ''
+    for r in range(1, header_row_idx):
+        for c in range(1, ws.max_column + 1):
+            val = str(ws.cell(r, c).value or '')
+            match = re.search(r'เดือน\s*([^\s]+)\s*ปี\s*(\d+)', val)
+            if match:
+                month_name, year_val = match.group(1), match.group(2)
+                break
+        if month_name:
+            break
+
+    # 3. Dynamic & Precise Column Mapping
+    col_map = {}
+    for c in range(1, ws.max_column + 1):
+        top = get_merged_cell_value(ws, header_row_idx - 1, c)
+        top = normalize_text(top)
+        sub = normalize_text(ws.cell(header_row_idx, c).value)
+        full = f"{top} {sub}".strip()
+
+        # Identifier columns
+        if 'พื้นที่' in sub:
+            col_map['area'] = c
+        elif 'แปลง' in sub:
+            col_map['block'] = c
+        elif 'แหล่ง' in sub:
+            col_map['field'] = c
+        elif 'จำนวนวัน' in sub or 'วันผลิต' in sub or 'days' in sub.lower():
+            col_map['days'] = c
+        elif 'หมายเหตุ' in sub:
+            col_map['notes'] = c
+
+        # BOE Equivalent columns (Check 'เทียบเท่า' FIRST before checking 'น้ำมันดิบ')
+        elif 'เทียบเท่า' in full or 'เทียบเท่า' in sub:
+            if 'เหลว' in full or 'คอนเดนเสท' in full:
+                col_map['cond_boed'] = c
+            elif 'ก๊าซ' in full:
+                col_map['gas_boed'] = c
+
+        # Pure Crude Oil (Must NOT contain 'เทียบเท่า')
+        elif 'น้ำมันดิบ' in full and 'เทียบเท่า' not in full:
+            col_map['crude_bpd'] = c
+
+        # Natural Gas (MMSCFD)
+        elif 'ก๊าซ' in full and any(u in full for u in ['ล้านลบ', 'mmscfd']):
+            col_map['gas_mmscfd'] = c
+
+        # Condensate (BPD - Must NOT contain 'เทียบเท่า')
+        elif ('เหลว' in full or 'คอนเดนเสท' in full) and 'เทียบเท่า' not in full:
+            col_map['cond_bpd'] = c
+
+    # 4. Extract Records
+    area_col = col_map.get('area', 1)
+    block_col = col_map.get('block', 2)
+    field_col = col_map.get('field', 3)
+
+    records = []
+    for r in range(header_row_idx + 1, ws.max_row + 1):
+        area_val = normalize_text(ws.cell(r, area_col).value)
+        if not area_val or any(k in area_val for k in ['รวมอัตรา', 'รายงานปริมาณ', 'หมายเหตุ']):
+            continue
+
+        raw_block = normalize_text(ws.cell(r, block_col).value)
+        raw_field = normalize_text(ws.cell(r, field_col).value)
+
+        gas_mmscfd = clean_number(ws.cell(r, col_map.get('gas_mmscfd')).value) if 'gas_mmscfd' in col_map else 0.0
+        gas_boed = clean_number(ws.cell(r, col_map.get('gas_boed')).value) if 'gas_boed' in col_map else 0.0
+        cond_bpd = clean_number(ws.cell(r, col_map.get('cond_bpd')).value) if 'cond_bpd' in col_map else 0.0
+        cond_boed = clean_number(ws.cell(r, col_map.get('cond_boed')).value) if 'cond_boed' in col_map else 0.0
+        crude_bpd = clean_number(ws.cell(r, col_map.get('crude_bpd')).value) if 'crude_bpd' in col_map else 0.0
+        total_boed = gas_boed + cond_boed + crude_bpd
+
+        days = clean_number(ws.cell(r, col_map.get('days')).value) if 'days' in col_map else 0.0
+        notes = normalize_text(ws.cell(r, col_map.get('notes')).value) if 'notes' in col_map else ''
+
+        records.append({
+            'Lookup_Key': f"{area_val}_{raw_block}_{raw_field}",
+            'ปี': int(year_val) if year_val.isdigit() else year_val,
+            'เดือน': month_name,
+            'ลำดับเดือน': MONTH_ORDER.get(month_name, 99),
+            'พื้นที่': area_val,
+            'แปลง_ไฟล์ดิบ': raw_block,
+            'แหล่ง_ไฟล์ดิบ': raw_field,
+            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': gas_mmscfd,
+            'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': gas_boed,
+            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': cond_bpd,
+            'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': cond_boed,
+            'น้ำมันดิบ (บาร์เรล/วัน)': crude_bpd,
+            'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': total_boed,
+            'จำนวนวันที่ผลิต': int(days) if days else 0,
+            'หมายเหตุ': notes,
+            'ไฟล์ที่มา': filename_label
+        })
+
+    return pd.DataFrame(records)
+
+def export_ptit_styled_excel(month_name, year_val, onshore_rows, offshore_rows, onshore_sub, offshore_sub, grand_tot):
+    """สร้างไฟล์ Excel พร้อมจัดฟอร์แมตสีเหมือนต้นฉบับเล่ม PTIT Statistics 100%"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Domestic_Production_{month_name}"
+    ws.views.sheetView[0].showGridLines = True
+
+    font_main = Font(name="Calibri", size=10)
+    font_bold = Font(name="Calibri", size=10, bold=True)
+    font_header = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+
+    fill_header = PatternFill(start_color="7E5E3F", end_color="7E5E3F", fill_type="solid")
+    fill_section = PatternFill(start_color="B49470", end_color="B49470", fill_type="solid")
+    fill_total = PatternFill(start_color="EFEBE6", end_color="EFEBE6", fill_type="solid")
+
+    double_bottom_border = Border(
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='double', color='000000')
+    )
+
+    align_right = Alignment(horizontal='right', vertical='center')
+    align_center = Alignment(horizontal='center', vertical='center')
+
+    num_fmt = '#,##0.0;(#,##0.0);"-";@'
+
+    # Header Row 1
+    ws.merge_cells('B1:D1')
+    ws['B1'] = "Domestic Production"
+    ws['B1'].font = font_header
+    ws['B1'].fill = fill_header
+    ws['B1'].alignment = align_center
+
+    ws['A1'] = f"Operator / Field ({month_name} {year_val})"
+    ws['A1'].font = font_header
+    ws['A1'].fill = fill_header
+    ws['A1'].alignment = align_center
+
+    # Header Row 2
+    headers = [
+        ("A2", "Operator / Field"),
+        ("B2", "Natural Gas\n(MMSCFD)"),
+        ("C2", "Condensate\n(BPD)"),
+        ("D2", "Crude\n(BPD)")
+    ]
+    for cell_ref, text in headers:
+        ws[cell_ref] = text
+        ws[cell_ref].font = font_header
+        ws[cell_ref].fill = fill_header
+        ws[cell_ref].alignment = align_center
+    ws.row_dimensions[2].height = 30
+
+    current_row = 3
+
+    def write_sec(sec_name, items, sub):
+        nonlocal current_row
+        ws.cell(row=current_row, column=1, value=sec_name).font = font_header
+        ws.cell(row=current_row, column=1).fill = fill_section
+
+        for c_idx, val in enumerate(sub, start=2):
+            cell = ws.cell(row=current_row, column=c_idx, value=val)
+            cell.font = font_header
+            cell.fill = fill_section
+            cell.alignment = align_right
+            cell.number_format = num_fmt
+        current_row += 1
+
+        for item in items:
+            ws.cell(row=current_row, column=1, value="    " + str(item['Operator_Field'])).font = font_main
+            for c_idx, val in enumerate([item['Gas'], item['Cond'], item['Crude']], start=2):
+                cell = ws.cell(row=current_row, column=c_idx, value=val if val >= 0.05 else (0.0 if val > 0 else 0))
+                cell.font = font_main
+                cell.alignment = align_right
+                cell.number_format = num_fmt
+            current_row += 1
+
+    write_sec("Onshore", onshore_rows, onshore_sub)
+    write_sec("Offshore", offshore_rows, offshore_sub)
+
+    # Total Row
+    ws.cell(row=current_row, column=1, value="Total").font = font_bold
+    ws.cell(row=current_row, column=1).fill = fill_total
+    ws.cell(row=current_row, column=1).alignment = align_center
+    ws.cell(row=current_row, column=1).border = double_bottom_border
+
+    for c_idx, val in enumerate(grand_tot, start=2):
+        cell = ws.cell(row=current_row, column=c_idx, value=val)
+        cell.font = font_bold
+        cell.fill = fill_total
+        cell.alignment = align_right
+        cell.number_format = num_fmt
+        cell.border = double_bottom_border
+    current_row += 2
+
+    # Notes & Source
+    ws.cell(row=current_row, column=1, value='Note:   Data shown as "0.0" means figure less than 0.05.').font = font_main
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='Source: DMF,  DEDP').font = font_main
+
+    ws.column_dimensions['A'].width = 55
+    ws.column_dimensions['B'].width = 16
+    ws.column_dimensions['C'].width = 16
+    ws.column_dimensions['D'].width = 16
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+# ----------------------------------------------------
+# DMF Live Stream Helpers & Data Processors
+# ----------------------------------------------------
+@st.cache_data(ttl=120)
+def cached_dmf_status():
+    return dmf.check_dmf_connection()
+
+@st.cache_data(ttl=300)
+def cached_dmf_inventory():
+    return dmf.get_dmf_online_inventory()
+
+def process_production_dfs(dfs, save_to_disk=False):
+    """รัน ETL แปลง DataFrames การผลิต เข้า Master Model และสร้าง Flat Tables"""
+    if not dfs:
+        return None
+    df_raw_combined = pd.concat(dfs, ignore_index=True)
+    df_master = load_master_mapping()
+
+    master_cols_to_join = [
+        'Lookup_Key', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order',
+        'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา'
+    ]
+    master_cols_to_join = [c for c in master_cols_to_join if c in df_master.columns]
+
+    df_merged = pd.merge(
+        df_raw_combined,
+        df_master[master_cols_to_join],
+        on='Lookup_Key',
+        how='left'
+    )
+    df_merged['PTIT_Operator_Field'] = df_merged['PTIT_Operator_Field'].fillna(df_merged['แหล่ง_ไฟล์ดิบ'])
+    df_merged['ผู้ดำเนินการ'] = df_merged['ผู้ดำเนินการ'].fillna('ยังไม่ระบุ')
+    df_merged['แอ่งปิโตรเลียม'] = df_merged['แอ่งปิโตรเลียม'].fillna('ยังไม่ระบุ')
+    df_merged['ประเภทสัญญา'] = df_merged['ประเภทสัญญา'].fillna('ยังไม่ระบุ')
+
+    df_merged = df_merged.sort_values(
+        by=['ปี', 'ลำดับเดือน', 'พื้นที่', 'PTIT_Order'],
+        ascending=[True, True, False, True]
+    ).reset_index(drop=True)
+
+    ordered_cols = [
+        'ปี', 'เดือน', 'ลำดับเดือน', 'พื้นที่', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order',
+        'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา',
+        'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+        'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)', 'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+        'น้ำมันดิบ (บาร์เรล/วัน)', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+        'จำนวนวันที่ผลิต', 'หมายเหตุ', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ', 'Lookup_Key', 'ไฟล์ที่มา'
+    ]
+    final_cols = [c for c in ordered_cols if c in df_merged.columns]
+    df_flat_wide = df_merged[final_cols]
+
+    metric_vars = [
+        'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)',
+        'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+        'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+        'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+        'น้ำมันดิบ (บาร์เรล/วัน)',
+        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+    ]
+    id_vars = [c for c in final_cols if c not in metric_vars]
+    df_flat_long = pd.melt(
+        df_flat_wide,
+        id_vars=id_vars,
+        value_vars=[c for c in metric_vars if c in df_flat_wide.columns],
+        var_name='ประเภทตัวชี้วัด',
+        value_name='ปริมาณ'
+    )
+
+    st.session_state['df_flat_wide'] = df_flat_wide
+    st.session_state['df_flat_long'] = df_flat_long
+
+    unmapped = df_merged[df_merged['ผู้ดำเนินการ'] == 'ยังไม่ระบุ'][['พื้นที่', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ']].drop_duplicates()
+    st.session_state['unmapped'] = unmapped
+
+    if save_to_disk:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        try:
+            with pd.ExcelWriter(DEFAULT_OUTPUT_FILE, engine='openpyxl') as writer:
+                df_flat_wide.to_excel(writer, sheet_name='Flat_Wide', index=False)
+                df_flat_long.to_excel(writer, sheet_name='Flat_Long_Unpivoted', index=False)
+                df_master.to_excel(writer, sheet_name='Master_Mapping', index=False)
+        except Exception:
+            pass
+
+    return df_flat_wide, df_flat_long, unmapped
+
+def process_sales_dfs(parsed_list, save_to_disk=False):
+    """รัน ETL แปลง DataFrames ยอดขาย เข้า Sale Master Model และสร้าง Flat Table"""
+    if not parsed_list:
+        return None
+    df_all_sales = pd.concat(parsed_list, ignore_index=True)
+    df_sale_master = load_sale_master_mapping()
+
+    df_sales_merged = pd.merge(df_all_sales, df_sale_master, on='แหล่ง_ไฟล์ดิบ', how='left')
+    df_sales_merged['พื้นที่'] = df_sales_merged['พื้นที่'].fillna('ไม่ระบุ')
+    df_sales_merged['ผู้ดำเนินการ'] = df_sales_merged['ผู้ดำเนินการ'].fillna('ไม่ระบุ')
+    df_sales_merged['แอ่งปิโตรเลียม'] = df_sales_merged['แอ่งปิโตรเลียม'].fillna('ไม่ระบุ')
+    df_sales_merged['ประเภทสัญญา'] = df_sales_merged['ประเภทสัญญา'].fillna('ไม่ระบุ')
+
+    df_sales_merged['ราคาเฉลี่ยต่อหน่วย_บาท'] = 0.0
+    mask_gas = (df_sales_merged['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ') & (df_sales_merged['ปริมาณการขาย_MMBTU'] > 0)
+    df_sales_merged.loc[mask_gas, 'ราคาเฉลี่ยต่อหน่วย_บาท'] = df_sales_merged.loc[mask_gas, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_gas, 'ปริมาณการขาย_MMBTU']
+
+    mask_oil = (df_sales_merged['ประเภทปิโตรเลียม'].isin(['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ'])) & (df_sales_merged['ปริมาณการขาย_หน่วยหลัก'] > 0)
+    df_sales_merged.loc[mask_oil, 'ราคาเฉลี่ยต่อหน่วย_บาท'] = df_sales_merged.loc[mask_oil, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_oil, 'ปริมาณการขาย_หน่วยหลัก']
+
+    ordered_sale_cols = [
+        'ปี', 'เดือน', 'ลำดับเดือน', 'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ',
+        'พื้นที่', 'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา',
+        'ปริมาณการขาย_หน่วยหลัก', 'หน่วยปริมาณ', 'ปริมาณการขาย_MMBTU',
+        'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'ราคาเฉลี่ยต่อหน่วย_บาท',
+        'หมายเหตุ', 'ไฟล์ที่มา'
+    ]
+    final_sale_cols = [c for c in ordered_sale_cols if c in df_sales_merged.columns]
+    df_sales_flat = df_sales_merged[final_sale_cols].sort_values(['ลำดับเดือน', 'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ']).reset_index(drop=True)
+
+    st.session_state['df_sale_flat'] = df_sales_flat
+
+    if save_to_disk:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        try:
+            with pd.ExcelWriter(DEFAULT_SALE_OUTPUT_FILE, engine='openpyxl') as writer:
+                df_sales_flat.to_excel(writer, sheet_name='Sale_Flat_Table', index=False)
+                df_sale_master.to_excel(writer, sheet_name='Sale_Master_Mapping', index=False)
+        except Exception:
+            pass
+
+    return df_sales_flat
+
+# ----------------------------------------------------
+# Auto-load existing output data if available & Auth setup
+# ----------------------------------------------------
+ADMIN_PASSWORD = "ptit2026"
+if 'user_role' not in st.session_state:
+    st.session_state['user_role'] = 'viewer'
+
+def run_auto_sync_production(online_items):
+    progress_bar = st.sidebar.progress(0, text="กำลังเตรียมการดึงข้อมูลการผลิตสด...")
+    items_sorted = sorted(online_items, key=lambda x: (x.get('year_be', 2569), x.get('month', 1)))
+    parsed_list = []
+    total = len(items_sorted)
+    
+    for idx, it in enumerate(items_sorted):
+        progress_bar.progress(idx / total, text=f"📥 สตรีม {it['label']} ({idx+1}/{total})...")
+        try:
+            buf, fname = dmf.stream_dmf_production_bytes(it['year_be'], it['month'])
+            df_parsed = parse_excel_file(buf, f"DMF_Online_{fname}")
+            parsed_list.append(df_parsed)
+        except Exception as ex:
+            st.sidebar.error(f"เกิดข้อผิดพลาดเดือน {it['label']}: {ex}")
+            
+    if parsed_list:
+        progress_bar.progress(1.0, text="🏷️ กำลังประมวลผล Flat Table...")
+        df_wide, df_long, unmapped = process_production_dfs(parsed_list, save_to_disk=True)
+        st.session_state['df_flat_wide'] = df_wide
+        st.session_state['df_flat_long'] = df_long
+        st.session_state['unmapped'] = unmapped
+        progress_bar.empty()
+        st.toast(f"🎉 อัปเดตข้อมูลการผลิต {total} เดือน ({len(df_wide):,} แถว) บันทึก Flat Table สำเร็จ!", icon="🚀")
+        st.rerun()
+
+def run_auto_sync_sales(online_items):
+    progress_bar = st.sidebar.progress(0, text="กำลังเตรียมการดึงข้อมูลยอดขายสด...")
+    items_sorted = sorted(online_items, key=lambda x: (x.get('year_ce', 2026), x.get('month', 1)))
+    parsed_list = []
+    total = len(items_sorted)
+    
+    for idx, it in enumerate(items_sorted):
+        progress_bar.progress(idx / total, text=f"📥 สตรีมยอดขาย {it['label']} ({idx+1}/{total})...")
+        try:
+            buf, fname = dmf.stream_dmf_sales_bytes(it['year_ce'], it['month'])
+            df_parsed = parse_sales_file(buf, f"DMF_Online_{fname}")
+            parsed_list.append(df_parsed)
+        except Exception as ex:
+            st.sidebar.error(f"เกิดข้อผิดพลาดเดือน {it['label']}: {ex}")
+            
+    if parsed_list:
+        progress_bar.progress(1.0, text="🏷️ กำลังประมวลผล Flat Table ยอดขาย...")
+        df_sales_flat = process_sales_dfs(parsed_list, save_to_disk=True)
+        st.session_state['df_sale_flat'] = df_sales_flat
+        progress_bar.empty()
+        st.toast(f"🎉 อัปเดตข้อมูลยอดขาย {total} เดือน ({len(df_sales_flat):,} แถว) บันทึก Flat Table สำเร็จ!", icon="🚀")
+        st.rerun()
+
+if 'df_flat_wide' not in st.session_state and os.path.exists(DEFAULT_OUTPUT_FILE):
+    try:
+        st.session_state['df_flat_wide'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Wide')
+        st.session_state['df_flat_long'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Long_Unpivoted')
+    except Exception:
+        pass
+
+if 'df_sale_flat' not in st.session_state and os.path.exists(DEFAULT_SALE_OUTPUT_FILE):
+    try:
+        st.session_state['df_sale_flat'] = pd.read_excel(DEFAULT_SALE_OUTPUT_FILE, sheet_name='Sale_Flat_Table')
+    except Exception:
+        pass
+
+# ----------------------------------------------------
+# Sidebar Navigation Menu & Domain Router
+# ----------------------------------------------------
+st.sidebar.markdown("""
+<div style="text-align: center; padding: 10px 0 12px 0;">
+    <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: linear-gradient(135deg, #0284C7 0%, #023E8A 100%); border-radius: 12px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.25); margin-bottom: 10px;">
+        <span style="font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.04em;">PTIT</span>
+    </div>
+    <h2 style="margin:0; color:#0F172A; font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 17px; letter-spacing: -0.01em;">Siam Hydrocarbon</h2>
+    <div style="display: inline-block; font-size: 10.5px; font-weight: 700; color: #0284C7; letter-spacing: 0.08em; text-transform: uppercase;">Statistics Intelligence</div>
+    <p style="margin:4px 0 0 0; font-size: 12px; color: #475569; font-weight: 500;">สถาบันปิโตรเลียมแห่งประเทศไทย</p>
+    <div style="height: 1px; background: linear-gradient(90deg, transparent, rgba(186, 230, 253, 0.8), transparent); margin-top: 14px;"></div>
+</div>
+""", unsafe_allow_html=True)
+
+# Role Switcher Widget
+user_role = st.session_state.get('user_role', 'viewer')
+if user_role == 'admin':
+    st.sidebar.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(254, 243, 199, 0.9) 0%, rgba(253, 230, 138, 0.8) 100%); border: 1px solid #F59E0B; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-weight: 700; color: #92400E; font-size: 13px;">🔑 สิทธิ์ผู้ดูแลระบบ (Admin)</span>
+            <span style="background: #F59E0B; color: white; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">UNLOCKED</span>
+        </div>
+        <div style="font-size: 11px; color: #78350F; margin-top: 3px;">เข้าถึงฟังก์ชัน Auto Sync, แปลงข้อมูล และ Master Model</div>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.sidebar.button("🚪 สลับกลับเป็นโหมด Viewer", use_container_width=True, key="btn_logout_admin"):
+        st.session_state['user_role'] = 'viewer'
+        st.toast("สลับเป็นโหมด Viewer เรียบร้อย", icon="👥")
+        st.rerun()
+else:
+    st.sidebar.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(240, 249, 255, 0.9) 0%, rgba(224, 242, 254, 0.8) 100%); border: 1px solid #BAE6FD; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-weight: 700; color: #0369A1; font-size: 13px;">👥 ผู้ใช้งานทั่วไป (Viewer)</span>
+            <span style="background: #0284C7; color: white; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">VIEW ONLY</span>
+        </div>
+        <div style="font-size: 11px; color: #475569; margin-top: 3px;">แดชบอร์ดสรุปสถิติ & รายงานทางการ PTIT</div>
+    </div>
+    """, unsafe_allow_html=True)
+    with st.sidebar.expander("🔑 ปลดล็อก Admin (ใส่รหัสผ่าน)", expanded=False):
+        pwd_val = st.text_input("รหัสผ่าน:", type="password", key="inp_admin_pwd")
+        if st.button("เข้าสู่โหมด Admin", key="btn_login_admin", use_container_width=True):
+            if pwd_val == ADMIN_PASSWORD:
+                st.session_state['user_role'] = 'admin'
+                st.toast("ปลดล็อกโหมด Admin เรียบร้อย!", icon="🎉")
+                st.rerun()
+            else:
+                st.error("รหัสผ่านไม่ถูกต้อง")
+
+st.sidebar.markdown("### หมวดหมู่สถิติ")
+
+base_options = [
+    "การผลิตปิโตรเลียม (DMF Production)",
+    "การจำหน่ายและมูลค่า (DMF Sales & Royalty)",
+    "การนำเข้า-ส่งออก (Import / Export)",
+    "การจัดหาและการใช้พลังงาน (Supply & Demand)"
+]
+if st.session_state.get('user_role', 'viewer') == 'admin':
+    base_options.append("จัดการ Master Data Model รวม")
+base_options.append("คู่มือการใช้งาน & เกี่ยวกับระบบ")
+
+data_domain = st.sidebar.radio(
+    "เลือกโมดูลที่ต้องการใช้งาน:",
+    options=base_options,
+    index=0
+)
+
+# Sidebar System Status Box
+st.sidebar.markdown("---")
+st.sidebar.markdown("##### 📊 สถานะข้อมูลในระบบ")
+
+if 'df_flat_wide' in st.session_state and not st.session_state['df_flat_wide'].empty:
+    df_sb = st.session_state['df_flat_wide']
+    loaded_months = len(df_sb['เดือน'].dropna().unique())
+    total_rows = len(df_sb)
+    st.sidebar.success(f"**การผลิต:** {loaded_months} เดือน ({total_rows:,} แถว)")
+else:
+    st.sidebar.info("**การผลิต:** ยังไม่พบข้อมูลในระบบ")
+
+if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+    df_s_sb = st.session_state['df_sale_flat']
+    l_s_m = len(df_s_sb['เดือน'].dropna().unique())
+    t_s_r = len(df_s_sb)
+    st.sidebar.success(f"**การจำหน่าย:** {l_s_m} เดือน ({t_s_r:,} แถว)")
+else:
+    st.sidebar.info("**การจำหน่าย:** ยังไม่พบข้อมูลในระบบ")
+
+# Sidebar DMF Cloud Connection & 1-Click Auto Sync Widget
+st.sidebar.markdown("---")
+st.sidebar.markdown("##### 🌐 DMF Portal & Auto-Sync")
+try:
+    dmf_stat = cached_dmf_status()
+    is_dmf_online = (dmf_stat.get('status') == 'online')
+    if is_dmf_online:
+        st.sidebar.markdown(f"""
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; font-size: 12px; margin-bottom: 8px;">
+            <span style="color: #065F46; font-weight: 600;"><span class="live-dot" style="width: 6px; height: 6px; margin-right: 6px;"></span>ระบบ DMF ออนไลน์</span>
+            <span style="font-family: 'JetBrains Mono', monospace; color: #047857; font-size: 11px;">{dmf_stat['elapsed_sec']}s</span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.sidebar.warning(f"DMF Portal: {dmf_stat.get('message', 'ออฟไลน์')}")
+except Exception:
+    is_dmf_online = False
+    st.sidebar.info("ตรวจสอบการเชื่อมต่อ DMF")
+
+try:
+    dmf_inv = cached_dmf_inventory()
+except Exception:
+    dmf_inv = {'production': [], 'sales': []}
+
+# Auto-Detect and 1-Click Sync based on current module
+if is_dmf_online:
+    if "การผลิต" in data_domain:
+        prod_online_items = dmf_inv.get('production', [])
+        if prod_online_items:
+            latest_online_prod = prod_online_items[0]
+            df_cur_p = st.session_state.get('df_flat_wide')
+            p_sys_months = df_cur_p['เดือน'].dropna().unique().tolist() if df_cur_p is not None and not df_cur_p.empty else []
+            num_online_p = len(prod_online_items)
+            num_sys_p = len(p_sys_months)
+            
+            if num_online_p > num_sys_p:
+                st.sidebar.markdown(f"""
+                <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.1);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #92400E; font-weight: 700; font-size: 12.5px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
+                        <span style="background: #F59E0B; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">NEW</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #475569; margin-top: 5px; line-height: 1.5;">
+                        • <b>เว็บ DMF มี:</b> {latest_online_prod['label']} ({num_online_p} เดือน)<br/>
+                        • <b>ในระบบมี:</b> {num_sys_p} เดือน
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.session_state.get('user_role', 'viewer') == 'admin':
+                    if st.sidebar.button("⚡ 1-Click Auto Sync การผลิต (RAM)", type="primary", use_container_width=True, key="btn_sync_prod_sidebar"):
+                        run_auto_sync_production(prod_online_items)
+                    st.sidebar.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                else:
+                    st.sidebar.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
+            else:
+                st.sidebar.markdown(f"""
+                <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #065F46; font-weight: 700; font-size: 12px;">✅ ข้อมูลการผลิตเป็นปัจจุบัน</span>
+                        <span style="background: #10B981; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">{num_sys_p} เดือน</span>
+                    </div>
+                    <div style="font-size: 11px; color: #047857; margin-top: 4px;">
+                        ครบถ้วน (ม.ค. - {latest_online_prod['month_name']} {latest_online_prod['year_be']})
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.session_state.get('user_role', 'viewer') == 'admin':
+                    if st.sidebar.button("🔄 รีเฟรชการผลิต (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_prod_sidebar"):
+                        run_auto_sync_production(prod_online_items)
+                    st.sidebar.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
+
+    elif "การจำหน่าย" in data_domain:
+        sale_online_items = dmf_inv.get('sales', [])
+        if sale_online_items:
+            latest_online_sale = sale_online_items[0]
+            df_cur_s = st.session_state.get('df_sale_flat')
+            s_sys_months = df_cur_s['เดือน'].dropna().unique().tolist() if df_cur_s is not None and not df_cur_s.empty else []
+            num_online_s = len(sale_online_items)
+            num_sys_s = len(s_sys_months)
+            
+            if num_online_s > num_sys_s:
+                st.sidebar.markdown(f"""
+                <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.1);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #92400E; font-weight: 700; font-size: 12.5px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
+                        <span style="background: #F59E0B; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">NEW</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #475569; margin-top: 5px; line-height: 1.5;">
+                        • <b>เว็บ DMF มี:</b> {latest_online_sale['label']} ({num_online_s} เดือน)<br/>
+                        • <b>ในระบบมี:</b> {num_sys_s} เดือน
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.session_state.get('user_role', 'viewer') == 'admin':
+                    if st.sidebar.button("⚡ 1-Click Auto Sync ยอดขาย (RAM)", type="primary", use_container_width=True, key="btn_sync_sale_sidebar"):
+                        run_auto_sync_sales(sale_online_items)
+                    st.sidebar.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                else:
+                    st.sidebar.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
+            else:
+                st.sidebar.markdown(f"""
+                <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="color: #065F46; font-weight: 700; font-size: 12px;">✅ ข้อมูลยอดขายเป็นปัจจุบัน</span>
+                        <span style="background: #10B981; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">{num_sys_s} เดือน</span>
+                    </div>
+                    <div style="font-size: 11px; color: #047857; margin-top: 4px;">
+                        ครบถ้วน (ม.ค. - {latest_online_sale['month_name']} {latest_online_sale['year_ce']})
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.session_state.get('user_role', 'viewer') == 'admin':
+                    if st.sidebar.button("🔄 รีเฟรชยอดขาย (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_sale_sidebar"):
+                        run_auto_sync_sales(sale_online_items)
+                    st.sidebar.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
+
+st.sidebar.markdown("""
+<div style="font-size: 11px; line-height: 1.8; color: #475569; padding-left: 2px;">
+    • <a href="https://dmf.go.th/public/epsummary/data/index/menu/1100" target="_blank" style="color: #0284C7; text-decoration: none;">DMF E&P Summary Report</a><br/>
+    • <a href="https://dmf.go.th/public/createpetroleum/data/index/menu/1114/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">รายงานการผลิต (เมนู 1114)</a><br/>
+    • <a href="https://dmf.go.th/public/salevalue/data/index/menu/774/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">รายงานการจำหน่าย (เมนู 774)</a>
+</div>
+""", unsafe_allow_html=True)
+
+# ----------------------------------------------------
+# Page Views for Non-Production Domains
+# ----------------------------------------------------
+if data_domain == "การจำหน่ายและมูลค่า (DMF Sales & Royalty)":
+    st.markdown("""
+    <div class="glass-panel" style="display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(254, 243, 199, 0.55) 100%); border: 1px solid rgba(255, 255, 255, 0.95);">
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: linear-gradient(135deg, #EA580C 0%, #D97706 100%); border-radius: 10px; color: white; font-size: 18px; box-shadow: 0 4px 10px rgba(234, 88, 12, 0.3);">💰</span>
+                <h1 style="margin:0; font-size: 22px; color: #0F172A; font-weight: 800;">Siam Hydrocarbon Intelligence</h1>
+                <span style="background: rgba(234, 88, 12, 0.1); color: #C2410C; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(234, 88, 12, 0.25);">SALES & ROYALTY</span>
+            </div>
+            <p style="margin:0; font-size: 13px; color: #475569;">วิเคราะห์สถิติมูลค่าการจำหน่ายและค่าภาคหลวงปิโตรเลียมรายเดือน (Petroleum Sales, Valuation & Royalty Telemetry)</p>
+        </div>
+        <div style="text-align: right; background: rgba(255, 255, 255, 0.85); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(254, 215, 170, 0.8); box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+            <div style="font-size: 11px; font-weight: 700; color: #EA580C; letter-spacing: 0.06em;"><span class="live-dot"></span>FISCAL TELEMETRY</div>
+            <div style="font-size: 12px; font-weight: 600; color: #0F172A; font-family: 'JetBrains Mono', monospace;">OFFTAKE & VALUE</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    is_admin = (st.session_state.get('user_role', 'viewer') == 'admin')
+    if is_admin:
+        tab_s_convert, tab_s_master, tab_s_charts, tab_s_report = st.tabs([
+            "⚡ 1. แปลงข้อมูลยอดขายเป็น Flat Table",
+            "🏷️ 2. จัดการ Sale Master Mapping",
+            "📊 3. กราฟวิเคราะห์มูลค่าและค่าภาคหลวง",
+            "📑 4. รายงานสรุปยอดจำหน่ายและค่าภาคหลวง"
+        ])
+    else:
+        tab_s_charts, tab_s_report = st.tabs([
+            "📊 แดชบอร์ดวิเคราะห์มูลค่าและค่าภาคหลวง (Sales Analytics)",
+            "📑 รายงานสรุปยอดจำหน่ายและค่าภาคหลวง (Fiscal Report)"
+        ])
+        tab_s_convert = None
+        tab_s_master = None
+
+    # ====================================================
+    # SALES TAB 1: CONVERTER (ADMIN ONLY)
+    # ====================================================
+    def render_sales_converter():
+        st.subheader("📁 เลือกไฟล์รายงานการจำหน่ายและค่าภาคหลวง")
+
+        c_s_mode, c_s_blank = st.columns([2.5, 1])
+        with c_s_mode:
+            sale_source_mode = st.radio(
+                "แหล่งที่มาของไฟล์รายงานยอดขาย:",
+                [
+                    "🌐 สตรีมข้อมูลสดจากเว็บ DMF โดยตรง (In-Memory Live Stream - ไม่บันทึกลงเครื่อง)",
+                    f"สแกนไฟล์ทั้งหมดในโฟลเดอร์ `Sale` อัตโนมัติ (`salevalue_*.xlsx`)",
+                    "อัปโหลดไฟล์ใหม่ (Drag & Drop)"
+                ],
+                horizontal=False,
+                key="sale_source_mode"
+            )
+
+        sale_files_to_process = []
+
+        if "สตรีมข้อมูลสด" in sale_source_mode:
+            st.markdown("""
+            <div style="background-color: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                <b style="color: #166534;">🌐 โหมด In-Memory Live Stream:</b> สตรีมข้อมูลยอดขายและค่าภาคหลวงส่งตรงจากเว็บ DMF เข้าสู่ RAM และแมพปิ้งขึ้นแดชบอร์ดทันที <b>โดยไม่มีการบันทึกไฟล์ลงฮาร์ดดิสก์</b> (Zero Disk Footprint)
+            </div>
+            """, unsafe_allow_html=True)
+
+            dmf_inv = cached_dmf_inventory()
+            sale_online_list = dmf_inv.get('sales', [])
+
+            if sale_online_list:
+                col_sel_s1, col_sel_s2 = st.columns([3, 1.2])
+                with col_sel_s1:
+                    opts_sale = [f"{item['label']} (ปี {item['year_ce']} เดือน {item['month']})" for item in sale_online_list]
+                    selected_sale_labels = st.multiselect(
+                        "เลือกเดือนที่ต้องการสตรีมสดจากเว็บ DMF:",
+                        options=opts_sale,
+                        default=opts_sale,
+                        key="selected_sale_stream_months"
+                    )
+                with col_sel_s2:
+                    save_backup_sales = st.checkbox("💾 บันทึกสำเนาลงโฟลเดอร์ `Sale` ด้วย", value=False, key="cb_save_backup_sales")
+                    if st.button("🔄 รีเฟรชรายการเว็บ", key="btn_ref_sales_inv"):
+                        st.cache_data.clear()
+                        st.rerun()
+
+                st.markdown("---")
+                btn_stream_sales = st.button("🚀 เริ่มสตรีมข้อมูลยอดขายสดจากเว็บ DMF ขึ้น Dashboard (In-Memory)", type="primary", use_container_width=True, key="btn_stream_sales")
+
+                if btn_stream_sales and selected_sale_labels:
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    streamed_parsed_list = []
+
+                    items_to_fetch = [item for item in sale_online_list if f"{item['label']} (ปี {item['year_ce']} เดือน {item['month']})" in selected_sale_labels]
+
+                    for idx, item in enumerate(items_to_fetch):
+                        status_text.write(f"📥 กำลังสตรีมข้อมูลเดือน **{item['label']}** จาก dmf.go.th เข้าสู่ RAM...")
+                        try:
+                            buf, fname = dmf.stream_dmf_sales_bytes(item['year_ce'], item['month'])
+                            if save_backup_sales:
+                                os.makedirs(SALE_DIR, exist_ok=True)
+                                with open(os.path.join(SALE_DIR, fname), 'wb') as f_out:
+                                    f_out.write(buf.getvalue())
+
+                            df_single = parse_sales_file(buf, f"DMF_Online_{fname}")
+                            streamed_parsed_list.append(df_single)
+                        except Exception as err:
+                            st.error(f"เกิดข้อผิดพลาดในการสตรีม {item['label']}: {err}")
+                        progress_bar.progress((idx + 1) / len(items_to_fetch))
+
+                    if streamed_parsed_list:
+                        status_text.write("🏷️ กำลังแมพปิ้ง Master Model และคำนวณราคาเฉลี่ย...")
+                        df_res = process_sales_dfs(streamed_parsed_list, save_to_disk=save_backup_sales)
+                        status_text.empty()
+                        progress_bar.empty()
+                        st.success(f"🎉 สตรีมข้อมูลสดสำเร็จ {len(items_to_fetch)} เดือน ({len(df_res):,} แถว) ขึ้นแดชบอร์ดเรียบร้อย!")
+                        st.rerun()
+            else:
+                st.warning("ไม่พบรายการเดือนออนไลน์บนเว็บ DMF หรือการเชื่อมต่อขัดข้อง")
+
+        elif "สแกนไฟล์" in sale_source_mode:
+            if os.path.exists(SALE_DIR):
+                all_sale_files = sorted([f for f in os.listdir(SALE_DIR) if f.endswith('.xlsx') and not f.startswith('~$')])
+                final_sale_files = []
+                for f in all_sale_files:
+                    if f == "salevalue_2026_02.xlsx" and "salevalue_2026_02 asof 7aug.xlsx" in all_sale_files:
+                        continue
+                    final_sale_files.append(f)
+
+                if final_sale_files:
+                    st.success(f"พบ **{len(final_sale_files)} ไฟล์** ในโฟลเดอร์ `Sale` พร้อมประมวลผล:")
+                    st.caption(" • " + ", ".join(final_sale_files))
+                    if "salevalue_2026_02 asof 7aug.xlsx" in final_sale_files:
+                        st.info("💡 **ระบบเลือกใช้อัตโนมัติ:** `salevalue_2026_02 asof 7aug.xlsx` (ฉบับปรับปรุงล่าสุด 7 ส.ค. สำหรับเดือน ก.พ.)")
+                    sale_files_to_process = [(os.path.join(SALE_DIR, f), f) for f in final_sale_files]
+                else:
+                    st.warning("ไม่พบไฟล์ Excel ในโฟลเดอร์ `Sale`")
+            else:
+                st.warning(f"ไม่พบโฟลเดอร์: `{SALE_DIR}`")
+        else:
+            uploaded_sales = st.file_uploader(
+                "ลากไฟล์รายงานยอดขาย Excel มาวางที่นี่ (เลือกได้หลายไฟล์พร้อมกัน):",
+                type=['xlsx', 'xls'],
+                accept_multiple_files=True,
+                key="sales_uploader_widget"
+            )
+            if uploaded_sales:
+                sale_files_to_process = [(io.BytesIO(f.read()), f.name) for f in uploaded_sales]
+                st.success(f"อัปโหลดเรียบร้อย {len(uploaded_sales)} ไฟล์")
+
+        if "สตรีมข้อมูลสด" not in sale_source_mode:
+            st.markdown("---")
+            btn_run_sale = st.button("🚀 เริ่มการแปลงข้อมูลยอดขายเป็น Flat Table", type="primary", use_container_width=True, key="btn_run_sales")
+
+            if btn_run_sale and sale_files_to_process:
+                with st.spinner("กำลังอ่านและสกัดข้อมูลจากไฟล์รายงานยอดขาย..."):
+                    parsed_list = []
+                    for f_src, f_label in sale_files_to_process:
+                        try:
+                            df_single = parse_sales_file(f_src, f_label)
+                            parsed_list.append(df_single)
+                        except Exception as e:
+                            st.error(f"เกิดข้อผิดพลาดในการประมวลผลไฟล์ `{f_label}`: {e}")
+
+                    if parsed_list:
+                        df_sales_flat = process_sales_dfs(parsed_list, save_to_disk=True)
+                        st.toast(f"บันทึกไฟล์อัตโนมัติแล้วที่: {DEFAULT_SALE_OUTPUT_FILE}", icon="✅")
+                        st.rerun()
+
+        if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+            df_s_show = st.session_state['df_sale_flat']
+            st.success(f"🎉 ตรวจจับและจับคู่กับ Master Data Model ครบสมบูรณ์! (ทั้งหมด {len(df_s_show)} แถว จาก {len(df_s_show['เดือน'].unique())} เดือน)")
+
+            buf_s = io.BytesIO()
+            with pd.ExcelWriter(buf_s, engine='openpyxl') as wr:
+                df_s_show.to_excel(wr, sheet_name='Sale_Flat_Table', index=False)
+            buf_s.seek(0)
+
+            st.download_button(
+                label="📥 ดาวน์โหลดตาราง Flat Table ยอดขาย (Excel .xlsx)",
+                data=buf_s,
+                file_name=f"petroleum_sale_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+
+            st.dataframe(df_s_show, use_container_width=True, height=450)
+        else:
+            st.info("💡 กรุณากดปุ่ม '🚀 เริ่มการแปลงข้อมูลยอดขายเป็น Flat Table' ด้านบนเพื่อเริ่มประมวลผลครับ")
+
+    if is_admin and tab_s_convert is not None:
+        with tab_s_convert:
+            render_sales_converter()
+
+    # ====================================================
+    # SALES TAB 2: MASTER LIST MANAGEMENT (ADMIN ONLY)
+    # ====================================================
+    def render_sales_master():
+        st.subheader("🏷️ จัดการตาราง Sale Master Data Model & Mapping")
+        st.caption("สามารถแก้ไข Operator, แอ่งปิโตรเลียม หรือหมายเหตุของแต่ละจุดจำหน่ายในตารางนี้ได้โดยตรง เมื่อแก้ไขเสร็จแล้วให้กดปุ่ม 'บันทึก Master List'")
+
+        df_sale_master_curr = load_sale_master_mapping()
+
+        edited_sale_master = st.data_editor(
+            df_sale_master_curr,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=500,
+            key="sale_master_editor"
+        )
+
+        col_btn_sm, col_info_sm = st.columns([1, 3])
+        with col_btn_sm:
+            if st.button("💾 บันทึก Sale Master List", type="primary", use_container_width=True, key="btn_save_sale_master"):
+                save_sale_master_mapping(edited_sale_master)
+                st.success("บันทึกข้อมูล Sale Master Data Model เรียบร้อยแล้ว!")
+                st.rerun()
+        with col_info_sm:
+            st.caption(f"📁 ไฟล์จัดเก็บอยู่ที่: `{os.path.basename(SALE_MASTER_FILE)}`")
+
+    if is_admin and tab_s_master is not None:
+        with tab_s_master:
+            render_sales_master()
+
+    # ====================================================
+    # SALES TAB 3: CHARTS & ANALYTICS
+    # ====================================================
+    with tab_s_charts:
+        st.subheader("📊 สรุปสถิติมูลค่าการจำหน่ายและค่าภาคหลวง (Sales & Royalty Analytics)")
+
+        if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+            df_s_data = st.session_state['df_sale_flat'].copy()
+
+            # Executive Summary & Quick Download Bar
+            s_months = df_s_data['เดือน'].dropna().unique().tolist()
+            tot_annual_val = df_s_data['มูลค่าการขาย_บาท'].sum()
+            tot_annual_roy = df_s_data['ค่าภาคหลวง_บาท'].sum()
+            
+            c_sum1, c_sum2 = st.columns([3, 1.2])
+            with c_sum1:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(254, 243, 199, 0.45) 0%, rgba(255, 251, 235, 0.7) 100%); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 10px 16px; margin-bottom: 12px;">
+                    <div style="font-size: 13.5px; font-weight: 700; color: #92400E;">
+                        📊 สรุปข้อมูลยอดขายสะสม {len(s_months)} เดือน (มกราคม - {s_months[-1] if s_months else ''})
+                    </div>
+                    <div style="font-size: 12px; color: #78350F; margin-top: 3px;">
+                        • มูลค่าการจำหน่ายสะสม: <b>{tot_annual_val/1e9:,.2f} พันล้านบาท</b> &nbsp;|&nbsp; 
+                        • ค่าภาคหลวงจัดเก็บสะสม: <b>{tot_annual_roy/1e9:,.2f} พันล้านบาท</b> &nbsp;|&nbsp; 
+                        • สัดส่วนค่าภาคหลวงเฉลี่ย: <b>{(tot_annual_roy/tot_annual_val*100) if tot_annual_val else 0:.2f}%</b>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c_sum2:
+                buf_s_quick = io.BytesIO()
+                with pd.ExcelWriter(buf_s_quick, engine='openpyxl') as wr:
+                    df_s_data.to_excel(wr, sheet_name='Sale_Flat_Table', index=False)
+                buf_s_quick.seek(0)
+                st.download_button(
+                    label="📥 ดาวน์โหลด Flat Table (.xlsx)",
+                    data=buf_s_quick,
+                    file_name=f"petroleum_sale_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="btn_dl_s_quick"
+                )
+
+            with st.expander("🔍 กรองข้อมูลสถิติยอดขาย (Filters)", expanded=False):
+                c_sf1, c_sf2, c_sf3 = st.columns(3)
+                with c_sf1:
+                    all_s_areas = sorted(df_s_data['พื้นที่'].dropna().unique())
+                    sel_s_area = st.multiselect("กรองตามพื้นที่:", options=all_s_areas, default=all_s_areas, key="sel_s_area")
+                with c_sf2:
+                    all_s_ops = sorted(df_s_data['ผู้ดำเนินการ'].dropna().unique())
+                    sel_s_op = st.multiselect("กรองตาม Operator:", options=all_s_ops, default=all_s_ops, key="sel_s_op")
+                with c_sf3:
+                    all_s_prods = sorted(df_s_data['ประเภทปิโตรเลียม'].dropna().unique())
+                    sel_s_prod = st.multiselect("กรองตามประเภทเชื้อเพลิง:", options=all_s_prods, default=all_s_prods, key="sel_s_prod")
+
+            df_s_filt = df_s_data[
+                (df_s_data['พื้นที่'].isin(sel_s_area)) &
+                (df_s_data['ผู้ดำเนินการ'].isin(sel_s_op)) &
+                (df_s_data['ประเภทปิโตรเลียม'].isin(sel_s_prod))
+            ].copy()
+
+            if df_s_filt.empty:
+                st.warning("⚠️ ไม่พบข้อมูลตามเงื่อนไขที่เลือก กรุณาเลือกตัวกรองใหม่อีกครั้ง")
+            else:
+                df_s_monthly = df_s_filt.groupby(['เดือน', 'ลำดับเดือน'], as_index=False).agg({
+                    'มูลค่าการขาย_บาท': 'sum',
+                    'ค่าภาคหลวง_บาท': 'sum'
+                }).sort_values('ลำดับเดือน').reset_index(drop=True)
+
+                df_s_monthly['Royalty_pct'] = (df_s_monthly['ค่าภาคหลวง_บาท'] / df_s_monthly['มูลค่าการขาย_บาท']) * 100
+                df_s_monthly['Value_MoM_diff'] = df_s_monthly['มูลค่าการขาย_บาท'].diff()
+                df_s_monthly['Value_MoM_pct'] = (df_s_monthly['Value_MoM_diff'] / df_s_monthly['มูลค่าการขาย_บาท'].shift(1)) * 100
+                df_s_monthly['Royalty_MoM_diff'] = df_s_monthly['ค่าภาคหลวง_บาท'].diff()
+                df_s_monthly['Royalty_MoM_pct'] = (df_s_monthly['Royalty_MoM_diff'] / df_s_monthly['ค่าภาคหลวง_บาท'].shift(1)) * 100
+
+                latest_s = df_s_monthly.iloc[-1]
+                st.markdown(f"##### 📌 สถิติประจำเดือนล่าสุด: **{latest_s['เดือน']}**")
+
+                k_s1, k_s2, k_s3, k_s4 = st.columns(4)
+                with k_s1:
+                    v_val = latest_s['มูลค่าการขาย_บาท']
+                    p_val = latest_s['Value_MoM_pct']
+                    st.metric("💰 มูลค่าการขายรวม", f"{v_val/1e9:,.2f} พันล้านบาท", f"{p_val:+.1f}% MoM" if pd.notna(p_val) else None)
+                with k_s2:
+                    v_roy = latest_s['ค่าภาคหลวง_บาท']
+                    p_roy = latest_s['Royalty_MoM_pct']
+                    st.metric("🏛️ ค่าภาคหลวงรวม", f"{v_roy/1e9:,.2f} พันล้านบาท", f"{p_roy:+.1f}% MoM" if pd.notna(p_roy) else None)
+                with k_s3:
+                    r_pct = latest_s['Royalty_pct']
+                    st.metric("📈 สัดส่วนค่าภาคหลวง", f"{r_pct:.1f}% ต่อยอดขาย")
+                with k_s4:
+                    ytd_val = df_s_monthly['มูลค่าการขาย_บาท'].sum()
+                    st.metric("📅 มูลค่าขายสะสม (YTD)", f"{ytd_val/1e9:,.2f} พันล้านบาท")
+
+                st.markdown("---")
+
+                ch_s1, ch_s2 = st.columns(2)
+                with ch_s1:
+                    st.markdown("#### 1. มูลค่าการจำหน่ายรวมรายเดือน (บาท)")
+                    df_prod_m = df_s_filt.groupby(['เดือน', 'ลำดับเดือน', 'ประเภทปิโตรเลียม'], as_index=False)['มูลค่าการขาย_บาท'].sum().sort_values('ลำดับเดือน')
+                    fig_s_val = px.bar(
+                        df_prod_m,
+                        x='เดือน',
+                        y='มูลค่าการขาย_บาท',
+                        color='ประเภทปิโตรเลียม',
+                        barmode='stack',
+                        title="มูลค่าการจำหน่ายปิโตรเลียมรายเดือนแยกตามประเภท (บาท)",
+                        labels={'มูลค่าการขาย_บาท': 'มูลค่า (บาท)', 'เดือน': 'เดือน'},
+                        color_discrete_map={
+                            'ก๊าซธรรมชาติ': '#0284C7',
+                            'ก๊าซธรรมชาติเหลว': '#7C3AED',
+                            'น้ำมันดิบ': '#EA580C',
+                            'ก๊าซปิโตรเลียมเหลว (LPG)': '#0096C7'
+                        }
+                    )
+                    fig_s_val.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    apply_crystal_aqua_theme(fig_s_val)
+                    st.plotly_chart(fig_s_val, use_container_width=True)
+
+                with ch_s2:
+                    st.markdown("#### 2. ค่าภาคหลวงที่จัดเก็บได้รายเดือน (บาท)")
+                    fig_s_roy = px.bar(
+                        df_s_monthly,
+                        x='เดือน',
+                        y='ค่าภาคหลวง_บาท',
+                        text_auto='.2s',
+                        title="ค่าภาคหลวงปิโตรเลียมรายเดือน (บาท)",
+                        labels={'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)', 'เดือน': 'เดือน'},
+                        color_discrete_sequence=['#F77F00']
+                    )
+                    fig_s_roy.update_traces(textposition='outside')
+                    apply_crystal_aqua_theme(fig_s_roy)
+                    st.plotly_chart(fig_s_roy, use_container_width=True)
+
+                ch_s3, ch_s4 = st.columns(2)
+                with ch_s3:
+                    st.markdown("#### 3. สัดส่วนมูลค่าการจำหน่ายตาม Operator")
+                    df_s_op = df_s_filt.groupby('ผู้ดำเนินการ', as_index=False)['มูลค่าการขาย_บาท'].sum()
+                    fig_s_op = px.pie(
+                        df_s_op,
+                        names='ผู้ดำเนินการ',
+                        values='มูลค่าการขาย_บาท',
+                        hole=0.45,
+                        title="Market Share มูลค่ายอดขายตาม Operator รวม",
+                        color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
+                    )
+                    apply_crystal_aqua_theme(fig_s_op)
+                    st.plotly_chart(fig_s_op, use_container_width=True)
+
+                with ch_s4:
+                    st.markdown("#### 4. ราคาเฉลี่ยต่อหน่วยโดยประมาณ (Implied Unit Price)")
+                    df_gas_p = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
+                        lambda g: pd.Series({'ก๊าซธรรมชาติ (บาท/MMBTU)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_MMBTU'].sum() if g['ปริมาณการขาย_MMBTU'].sum() > 0 else 0}),
+                        include_groups=False
+                    ).reset_index().sort_values('ลำดับเดือน')
+
+                    df_oil_p = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'น้ำมันดิบ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
+                        lambda g: pd.Series({'น้ำมันดิบ (บาท/บาร์เรล)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_หน่วยหลัก'].sum() if g['ปริมาณการขาย_หน่วยหลัก'].sum() > 0 else 0}),
+                        include_groups=False
+                    ).reset_index().sort_values('ลำดับเดือน')
+
+                    df_price_m = pd.merge(df_gas_p[['เดือน', 'ลำดับเดือน', 'ก๊าซธรรมชาติ (บาท/MMBTU)']], df_oil_p[['เดือน', 'น้ำมันดิบ (บาท/บาร์เรล)']], on='เดือน', how='outer').sort_values('ลำดับเดือน')
+
+                    fig_s_price = px.line(
+                        df_price_m,
+                        x='เดือน',
+                        y=['ก๊าซธรรมชาติ (บาท/MMBTU)', 'น้ำมันดิบ (บาท/บาร์เรล)'],
+                        markers=True,
+                        title="แนวโน้มราคาเฉลี่ยต่อหน่วยโดยประมาณรายเดือน",
+                        color_discrete_map={
+                            'ก๊าซธรรมชาติ (บาท/MMBTU)': '#0284C7',
+                            'น้ำมันดิบ (บาท/บาร์เรล)': '#EA580C'
+                        }
+                    )
+                    fig_s_price.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    apply_crystal_aqua_theme(fig_s_price)
+                    st.plotly_chart(fig_s_price, use_container_width=True)
+
+                st.markdown("#### 5. ตารางสรุปตัวเลขสถิติรายเดือน")
+                df_s_tbl = df_s_monthly[['เดือน', 'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'Royalty_pct', 'Value_MoM_diff', 'Value_MoM_pct']].copy()
+                df_s_tbl.rename(columns={
+                    'มูลค่าการขาย_บาท': 'มูลค่าการขาย (บาท)',
+                    'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)',
+                    'Royalty_pct': 'สัดส่วนค่าภาคหลวง (%)',
+                    'Value_MoM_diff': 'เปลี่ยนแปลง MoM (บาท)',
+                    'Value_MoM_pct': 'MoM (%)'
+                }, inplace=True)
+                st.dataframe(
+                    df_s_tbl.style.format({
+                        'มูลค่าการขาย (บาท)': '{:,.0f}',
+                        'ค่าภาคหลวง (บาท)': '{:,.0f}',
+                        'สัดส่วนค่าภาคหลวง (%)': '{:.2f}%',
+                        'เปลี่ยนแปลง MoM (บาท)': lambda x: f"{x:+,.0f}" if pd.notna(x) else "-",
+                        'MoM (%)': lambda x: f"{x:+.2f}%" if pd.notna(x) else "-"
+                    }),
+                    use_container_width=True
+                )
+        else:
+            if st.session_state.get('user_role', 'viewer') == 'admin':
+                st.info("💡 ยังไม่มีข้อมูลยอดขายในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync ยอดขาย' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
+            else:
+                st.info("💡 ขณะนี้ยังไม่มีข้อมูลยอดขายในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อรัน Auto Sync ข้อมูลล่าสุดครับ")
+
+    # ====================================================
+    # SALES TAB 4: SUMMARY REPORT
+    # ====================================================
+    with tab_s_report:
+        st.subheader("📑 รายงานสรุปยอดจำหน่ายและค่าภาคหลวงรายเดือน")
+
+        if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+            df_s_rep = st.session_state['df_sale_flat'].copy()
+            months_avail = df_s_rep[['เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน', ascending=False)['เดือน'].tolist()
+
+            sel_s_month = st.selectbox("📅 เลือกเดือนที่ต้องการดูรายงาน:", options=months_avail, index=0, key="sel_s_month")
+            df_s_month_data = df_s_rep[df_s_rep['เดือน'] == sel_s_month].copy()
+
+            tot_val = df_s_month_data['มูลค่าการขาย_บาท'].sum()
+            tot_roy = df_s_month_data['ค่าภาคหลวง_บาท'].sum()
+            st.info(f"📊 สรุปยอดเดือน **{sel_s_month}**: มูลค่าการขายรวม **{tot_val:,.2f} บาท** | ค่าภาคหลวงรวม **{tot_roy:,.2f} บาท**")
+
+            report_cols = [
+                'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ', 'ผู้ดำเนินการ', 'พื้นที่', 'แอ่งปิโตรเลียม',
+                'ปริมาณการขาย_หน่วยหลัก', 'หน่วยปริมาณ', 'ปริมาณการขาย_MMBTU',
+                'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'หมายเหตุ'
+            ]
+            df_rep_show = df_s_month_data[[c for c in report_cols if c in df_s_month_data.columns]].copy()
+
+            st.dataframe(
+                df_rep_show.style.format({
+                    'ปริมาณการขาย_หน่วยหลัก': '{:,.2f}',
+                    'ปริมาณการขาย_MMBTU': lambda x: f"{x:,.2f}" if pd.notna(x) else "-",
+                    'มูลค่าการขาย_บาท': '{:,.2f}',
+                    'ค่าภาคหลวง_บาท': '{:,.2f}'
+                }),
+                use_container_width=True,
+                height=500
+            )
+
+            buf_rep = io.BytesIO()
+            with pd.ExcelWriter(buf_rep, engine='openpyxl') as w_rep:
+                df_rep_show.to_excel(w_rep, sheet_name=f'Sale_{sel_s_month}', index=False)
+            buf_rep.seek(0)
+            st.download_button(
+                label=f"📥 ดาวน์โหลดรายงานประจำเดือน {sel_s_month} (Excel .xlsx)",
+                data=buf_rep,
+                file_name=f"DMF_Petroleum_Sale_{sel_s_month}_2569.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="btn_dl_s_report"
+            )
+        else:
+            if st.session_state.get('user_role', 'viewer') == 'admin':
+                st.info("💡 ยังไม่มีข้อมูลยอดขายในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync ยอดขาย' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
+            else:
+                st.info("💡 ขณะนี้ยังไม่มีข้อมูลยอดขายในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อรัน Auto Sync ข้อมูลล่าสุดครับ")
+
+    st.stop()
+
+if data_domain == "การนำเข้า-ส่งออก (Import / Export)":
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #0b486b 0%, #3b8d99 100%); padding: 22px; border-radius: 12px; margin-bottom: 20px; color: white;">
+        <h1 style="margin:0; font-size: 26px; color: white;">PTIT Focus Statistics - โมดูลการนำเข้าและส่งออกปิโตรเลียม (Import & Export Data Hub)</h1>
+        <p style="margin:5px 0 0 0; opacity: 0.9; font-size: 14px;">ศูนย์กลางการจัดการและแปลงข้อมูลสถิติการนำเข้าน้ำมันดิบ น้ำมันสำเร็จรูป ก๊าซธรรมชาติ (LNG) และการส่งออก</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.info("โครงสร้างโมดูลพร้อมเชื่อมต่อ (Ready for Future Integration): เมื่อมีไฟล์ข้อมูลจากกรมศุลกากร / กรมธุรกิจพลังงาน (DOEB) สามารถนำมาวางเพื่อเขียน Script สกัดเป็น Flat Table ได้ทันที")
+
+    col_ie1, col_ie2 = st.columns([3, 2])
+    with col_ie1:
+        st.subheader("อัปโหลดไฟล์รายงานการนำเข้า-ส่งออก")
+        uploaded_ie = st.file_uploader(
+            "ลากไฟล์รายงานการนำเข้า/ส่งออก (Excel หรือ CSV) มาวางที่นี่:",
+            type=['xlsx', 'xls', 'csv'],
+            key="ie_uploader"
+        )
+        if uploaded_ie:
+            st.success(f"ตรวจพบไฟล์: `{uploaded_ie.name}` พร้อมสำหรับการประมวลผลเมื่อเชื่อมต่อสคริปต์สกัดข้อมูล")
+        else:
+            st.caption("ตัวอย่างไฟล์ที่รองรับในอนาคต: รายงานการนำเข้าน้ำมันดิบรายประเทศ, การส่งออกน้ำมันสำเร็จรูปรายผลิตภัณฑ์ ฯลฯ")
+
+    with col_ie2:
+        st.subheader("แผนผังชุดข้อมูลเป้าหมาย")
+        st.markdown("""
+        - **การนำเข้าน้ำมันดิบ (Crude Oil Imports):** ปริมาณ (BPD, Liters), มูลค่า C.I.F., จำแนกตามแหล่งกำเนิด (Middle East, Far East, อื่นๆ)
+        - **การนำเข้า-ส่งออกผลิตภัณฑ์ปิโตรเลียมสำเร็จรูป:** เบนซิน, ดีเซล, น้ำมันอากาศยาน (Jet Fuel), น้ำมันเตา, LPG
+        - **การนำเข้าก๊าซธรรมชาติเหลว (LNG):** สัญญาระยะยาว & ตลาดจร (Spot)
+        """)
+    st.stop()
+
+elif data_domain == "การจัดหาและการใช้พลังงาน (Supply & Demand)":
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #d35400 0%, #e67e22 100%); padding: 22px; border-radius: 12px; margin-bottom: 20px; color: white;">
+        <h1 style="margin:0; font-size: 26px; color: white;">PTIT Focus Statistics - โมดูลการจัดหาและการใช้น้ำมัน (Supply & Demand Hub)</h1>
+        <p style="margin:5px 0 0 0; opacity: 0.9; font-size: 14px;">สถิติการจำหน่ายและการใช้น้ำมันเชื้อเพลิงสำเร็จรูปรายผลิตภัณฑ์และรายภาคเศรษฐกิจ</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.info("โครงสร้างโมดูลพร้อมเชื่อมต่อ (Ready for Future Integration): รองรับไฟล์สถิติจากกรมธุรกิจพลังงาน (DOEB) หรือสำนักงานนโยบายและแผนพลังงาน (EPPO)")
+
+    col_sd1, col_sd2 = st.columns([3, 2])
+    with col_sd1:
+        st.subheader("อัปโหลดไฟล์รายงานยอดจำหน่าย / การใช้น้ำมัน")
+        uploaded_sd = st.file_uploader(
+            "ลากไฟล์รายงานการใช้น้ำมัน (Excel หรือ CSV) มาวางที่นี่:",
+            type=['xlsx', 'xls', 'csv'],
+            key="sd_uploader"
+        )
+        if uploaded_sd:
+            st.success(f"ตรวจพบไฟล์: `{uploaded_sd.name}` พร้อมสำหรับการประมวลผล")
+
+    with col_sd2:
+        st.subheader("แผนผังชุดข้อมูลเป้าหมาย")
+        st.markdown("""
+        - **ภาคขนส่ง (Transportation):** แก๊สโซฮอล์ 95, 91, E20, E85, ดีเซล B7, B10, B20, NGV
+        - **ภาคอุตสาหกรรม (Industry):** น้ำมันเตา, ก๊าซปิโตรเลียมเหลว (LPG)
+        - **การบิน (Aviation):** น้ำมันอากาศยาน Jet A-1
+        - **การผลิตไฟฟ้า (Power Generation):** ก๊าซธรรมชาติ, ดีเซล, น้ำมันเตา
+        """)
+    st.stop()
+
+elif data_domain == "จัดการ Master Data Model รวม":
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%); padding: 22px; border-radius: 12px; margin-bottom: 20px; color: white;">
+        <h1 style="margin:0; font-size: 26px; color: white;">PTIT Master Data Management Hub</h1>
+        <p style="margin:5px 0 0 0; opacity: 0.9; font-size: 14px;">ตารางฐานข้อมูลหลักสำหรับควบคุมมาตรฐานรหัส, ชื่อ Operator, แอ่งปิโตรเลียม, แปลงสัมปทาน และการเชื่อมโยงระบบ</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("ตาราง Master Data Model & Mapping กลาง")
+    st.caption("สามารถดับเบิลคลิกแก้ไขข้อมูลในตารางด้านล่างนี้ได้โดยตรง เมื่อแก้ไขเสร็จแล้วให้กดปุ่ม 'บันทึก Master Data Model'")
+
+    df_master_current = load_master_mapping()
+    st.markdown(f"**จำนวนข้อมูล Master Mapping ในระบบ:** `{len(df_master_current)} รายการ`")
+
+    edited_master_global = st.data_editor(
+        df_master_current,
+        num_rows="dynamic",
+        use_container_width=True,
+        height=550,
+        key="global_master_editor"
+    )
+
+    col_btn_m, col_info_m = st.columns([1, 3])
+    with col_btn_m:
+        if st.button("💾 บันทึก Master Data Model", type="primary", use_container_width=True, key="btn_save_global_master"):
+            save_master_mapping(edited_master_global)
+            st.success("บันทึกข้อมูล Master Data Model เรียบร้อยแล้ว!")
+            st.rerun()
+
+    with col_info_m:
+        st.caption(f"📁 บันทึกลงไฟล์: `{os.path.basename(MASTER_FILE)}` (ใช้ร่วมกันทุกโมดูลในระบบ)")
+    st.stop()
+
+elif data_domain == "คู่มือการใช้งาน & เกี่ยวกับระบบ":
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #373b44 0%, #4286f4 100%); padding: 22px; border-radius: 12px; margin-bottom: 20px; color: white;">
+        <h1 style="margin:0; font-size: 26px; color: white;">📖 คู่มือการใช้งาน & รายละเอียดระบบ (System Documentation)</h1>
+        <p style="margin:5px 0 0 0; opacity: 0.9; font-size: 14px;">คู่มือขั้นตอนการดำเนินงานประจำเดือน คำอธิบาย Data Model และโครงสร้างของระบบ PTIT Focus Statistics</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    manual_path = os.path.join(BASE_DIR, "คู่มือการใช้งาน.md")
+    if os.path.exists(manual_path):
+        with open(manual_path, "r", encoding="utf-8") as f:
+            manual_text = f.read()
+        st.markdown(manual_text)
+    else:
+        st.info("ไม่พบไฟล์คู่มือการใช้งาน.md")
+    st.stop()
+
+# ----------------------------------------------------
+# Production Domain Main View
+# ----------------------------------------------------
+st.markdown("""
+<div class="glass-panel" style="display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(224, 242, 254, 0.65) 100%); border: 1px solid rgba(255, 255, 255, 0.95);">
+    <div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%); border-radius: 10px; color: white; font-size: 18px; box-shadow: 0 4px 10px rgba(2, 132, 199, 0.3);">🛢️</span>
+            <h1 style="margin:0; font-size: 22px; color: #0F172A; font-weight: 800;">Siam Hydrocarbon Intelligence</h1>
+            <span style="background: rgba(2, 132, 199, 0.1); color: #0284C7; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(2, 132, 199, 0.25);">PRODUCTION TELEMETRY</span>
+        </div>
+        <p style="margin:0; font-size: 13px; color: #475569;">ระบบสถิติและการผลิตปิโตรเลียมประเทศไทย (Thailand Petroleum Telemetry & Analytics Platform) • สถาบันปิโตรเลียมแห่งประเทศไทย (PTIT)</p>
+    </div>
+    <div style="text-align: right; background: rgba(255, 255, 255, 0.85); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(186, 230, 253, 0.8); box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+        <div style="font-size: 11px; font-weight: 700; color: #0284C7; letter-spacing: 0.06em;"><span class="live-dot"></span>LIVE TELEMETRY</div>
+        <div style="font-size: 12px; font-weight: 600; color: #0F172A; font-family: 'JetBrains Mono', monospace;">CRYSTAL AQUA GLASS</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+is_admin = (st.session_state.get('user_role', 'viewer') == 'admin')
+if is_admin:
+    tab_convert, tab_master, tab_charts, tab_ptit_report = st.tabs([
+        "⚡ 1. แปลงข้อมูลเป็น Flat Table",
+        "🏷️ 2. จัดการ Master List & Data Model",
+        "📊 3. แดชบอร์ดสรุปสถิติ & กราฟแนวโน้ม (Production Analytics)",
+        "📑 4. รายงานมาตรฐาน PTIT (Domestic Production)"
+    ])
+else:
+    tab_charts, tab_ptit_report = st.tabs([
+        "📊 แดชบอร์ดสรุปสถิติ & กราฟแนวโน้ม (Production Analytics)",
+        "📑 รายงานมาตรฐาน PTIT (Domestic Production Report)"
+    ])
+    tab_convert = None
+    tab_master = None
+
+# ====================================================
+# TAB 1: CONVERTER (ADMIN ONLY)
+# ====================================================
+def render_production_converter():
+    st.subheader("📁 เลือกไฟล์ที่ต้องการแปลง")
+
+    col_src, col_opt = st.columns([2.5, 1])
+    with col_src:
+        source_mode = st.radio(
+            "แหล่งที่มาของไฟล์การผลิต:",
+            [
+                "🌐 สตรีมข้อมูลสดจากเว็บ DMF โดยตรง (In-Memory Live Stream - ไม่บันทึกลงเครื่อง)",
+                "สแกนไฟล์ทั้งหมดในโฟลเดอร์นี้อัตโนมัติ (`createpetroleum_*.xlsx`)",
+                "อัปโหลดไฟล์ใหม่ (Drag & Drop)"
+            ],
+            horizontal=False,
+            key="prod_source_mode"
+        )
+
+    files_to_process = []
+
+    if "สตรีมข้อมูลสด" in source_mode:
+        st.markdown("""
+        <div style="background-color: #eff6ff; border: 1px solid #93c5fd; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <b style="color: #1e40af;">🌐 โหมด In-Memory Live Stream:</b> สตรีมข้อมูลรายงานการผลิตปิโตรเลียมส่งตรงจากเว็บ DMF เข้าสู่ RAM และแมพปิ้งขึ้นแดชบอร์ดทันที <b>โดยไม่มีการบันทึกไฟล์ลงฮาร์ดดิสก์</b> (Zero Disk Footprint)
+        </div>
+        """, unsafe_allow_html=True)
+
+        dmf_inv = cached_dmf_inventory()
+        prod_online_list = dmf_inv.get('production', [])
+
+        if prod_online_list:
+            col_sel_p1, col_sel_p2 = st.columns([3, 1.2])
+            with col_sel_p1:
+                opts_prod = [f"{item['label']} (เดือน {item['month']})" for item in prod_online_list]
+                selected_prod_labels = st.multiselect(
+                    "เลือกเดือนที่ต้องการสตรีมสดจากเว็บ DMF:",
+                    options=opts_prod,
+                    default=opts_prod,
+                    key="selected_prod_stream_months"
+                )
+            with col_sel_p2:
+                save_backup_prod = st.checkbox("💾 บันทึกสำเนาลงโฟลเดอร์ Production ด้วย", value=False, key="cb_save_backup_prod")
+                if st.button("🔄 รีเฟรชรายการเว็บ", key="btn_ref_prod_inv"):
+                    st.cache_data.clear()
+                    st.rerun()
+
+            st.markdown("---")
+            btn_stream_prod = st.button("🚀 เริ่มสตรีมข้อมูลการผลิตสดจากเว็บ DMF ขึ้น Dashboard (In-Memory)", type="primary", use_container_width=True, key="btn_stream_prod")
+
+            if btn_stream_prod and selected_prod_labels:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                streamed_parsed_list = []
+
+                items_to_fetch = [item for item in prod_online_list if f"{item['label']} (เดือน {item['month']})" in selected_prod_labels]
+
+                for idx, item in enumerate(items_to_fetch):
+                    status_text.write(f"📥 กำลังสตรีมข้อมูลเดือน **{item['label']}** จาก dmf.go.th เข้าสู่ RAM...")
+                    try:
+                        buf, fname = dmf.stream_dmf_production_bytes(item['year_be'], item['month'])
+                        if save_backup_prod:
+                            os.makedirs(BASE_DIR, exist_ok=True)
+                            with open(os.path.join(BASE_DIR, fname), 'wb') as f_out:
+                                f_out.write(buf.getvalue())
+
+                        df_sub = parse_excel_file(buf, f"DMF_Online_{fname}")
+                        streamed_parsed_list.append(df_sub)
+                    except Exception as err:
+                        st.error(f"เกิดข้อผิดพลาดในการสตรีม {item['label']}: {err}")
+                    progress_bar.progress((idx + 1) / len(items_to_fetch))
+
+                if streamed_parsed_list:
+                    status_text.write("🏷️ กำลังแมพปิ้ง Master Model และจัดทำ Flat Tables...")
+                    df_wide, df_long, unmapped = process_production_dfs(streamed_parsed_list, save_to_disk=save_backup_prod)
+                    status_text.empty()
+                    progress_bar.empty()
+                    st.success(f"🎉 สตรีมข้อมูลสดสำเร็จ {len(items_to_fetch)} เดือน ({len(df_wide):,} แถว) ขึ้นแดชบอร์ดเรียบร้อย!")
+                    st.rerun()
+        else:
+            st.warning("ไม่พบรายการเดือนออนไลน์บนเว็บ DMF หรือการเชื่อมต่อขัดข้อง")
+
+    elif "สแกนไฟล์" in source_mode:
+        local_files = sorted(glob.glob(os.path.join(BASE_DIR, "createpetroleum_2569_*.xlsx")))
+        if local_files:
+            st.success(f"พบ {len(local_files)} ไฟล์ในโฟลเดอร์ปัจจุบันพร้อมแปลง:")
+            file_names = [os.path.basename(f) for f in local_files]
+            st.caption(" • " + ", ".join(file_names))
+            files_to_process = [(f, os.path.basename(f)) for f in local_files]
+        else:
+            st.warning("ไม่พบไฟล์ชื่อ `createpetroleum_*.xlsx` ในโฟลเดอร์นี้")
+    else:
+        uploaded_files = st.file_uploader(
+            "ลากไฟล์ Excel รายเดือนมาวางที่นี่ (เลือกได้หลายไฟล์พร้อมกัน):",
+            type=['xlsx', 'xls'],
+            accept_multiple_files=True
+        )
+        if uploaded_files:
+            files_to_process = [(io.BytesIO(f.read()), f.name) for f in uploaded_files]
+            st.success(f"อัปโหลดเรียบร้อย {len(uploaded_files)} ไฟล์")
+
+    if "สตรีมข้อมูลสด" not in source_mode:
+        st.markdown("---")
+        btn_run = st.button("🚀 เริ่มการแปลงข้อมูลเป็น Flat Table", type="primary", use_container_width=True)
+
+        if btn_run and files_to_process:
+            with st.spinner("กำลังอ่านไฟล์และปรับปรุงข้อมูลเข้า Data Model..."):
+                dfs = []
+                for file_input, name in files_to_process:
+                    try:
+                        df_sub = parse_excel_file(file_input, name)
+                        dfs.append(df_sub)
+                    except Exception as e:
+                        st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์ {name}: {e}")
+
+                if dfs:
+                    process_production_dfs(dfs, save_to_disk=True)
+                    st.toast(f"บันทึกไฟล์อัตโนมัติแล้วที่: {DEFAULT_OUTPUT_FILE}", icon="✅")
+                    st.rerun()
+
+    # Display Results if Available
+    if 'df_flat_wide' in st.session_state:
+        df_wide = st.session_state['df_flat_wide']
+        df_long = st.session_state['df_flat_long']
+        unmapped = st.session_state.get('unmapped', pd.DataFrame())
+
+        if len(unmapped) > 0:
+            st.warning(f"⚠️ พบ **{len(unmapped)} แหล่งใหม่** ที่ยังไม่มีข้อมูลใน Master List (ระบบใส่ชื่อตั้งต้นให้แล้ว คุณสามารถไประบุ Operator/Basin ได้ที่แท็บ 'จัดการ Master List')")
+            with st.expander("ดูรายชื่อแหล่งที่ยังไม่ได้ระบุ Master:"):
+                st.dataframe(unmapped, use_container_width=True)
+        else:
+            st.success(f"🎉 ตรวจจับและจับคู่กับ Master Data Model ครบสมบูรณ์ 100%! (ทั้งหมด {len(df_wide)} แถว)")
+
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        kpi1.metric("จำนวนรายการทั้งหมด", f"{len(df_wide):,} แถว")
+        kpi2.metric("เดือนที่ครอบคลุม", f"{df_wide['เดือน'].nunique()} เดือน")
+        if 'น้ำมันดิบ (บาร์เรล/วัน)' in df_wide.columns:
+            kpi3.metric("ปริมาณน้ำมันดิบรวมเฉลี่ย", f"{df_wide['น้ำมันดิบ (บาร์เรล/วัน)'].mean():,.1f} BPD")
+        else:
+            kpi3.metric("ผู้ดำเนินการ (Operators)", f"{df_wide['ผู้ดำเนินการ'].nunique()} ราย")
+        kpi4.metric("ผู้ดำเนินการ (Operators)", f"{df_wide['ผู้ดำเนินการ'].nunique()} ราย")
+
+        st.markdown("---")
+
+        d_col1, d_col2, d_col3 = st.columns([1.5, 1.5, 3])
+        with d_col1:
+            buf_excel = io.BytesIO()
+            with pd.ExcelWriter(buf_excel, engine='openpyxl') as wr:
+                df_wide.to_excel(wr, sheet_name='Flat_Wide', index=False)
+                df_long.to_excel(wr, sheet_name='Flat_Long_Unpivoted', index=False)
+            buf_excel.seek(0)
+            st.download_button(
+                label="📥 ดาวน์โหลด Excel (.xlsx มี 2 ชีท)",
+                data=buf_excel,
+                file_name="DMF_Petroleum_Production_Flat_Table.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        with d_col2:
+            st.download_button(
+                label="📥 ดาวน์โหลด CSV (UTF-8)",
+                data=df_wide.to_csv(index=False).encode('utf-8-sig'),
+                file_name="DMF_Petroleum_Production_Flat_Wide.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with d_col3:
+            st.info(f"💾 **บันทึกอัตโนมัติแล้ว:** `{os.path.relpath(DEFAULT_OUTPUT_FILE, BASE_DIR)}`")
+
+        st.write("### 👀 พรีวิวตารางข้อมูลผลลัพธ์")
+        sub_tab_wide, sub_tab_long = st.tabs(["ตาราง Flat แบบ Wide (คอลัมน์กว้าง)", "ตาราง Flat แบบ Long (สำหรับ Power BI / SQL)"])
+
+        with sub_tab_wide:
+            st.dataframe(df_wide, use_container_width=True, height=450)
+
+        with sub_tab_long:
+            st.dataframe(df_long, use_container_width=True, height=450)
+
+if is_admin and tab_convert is not None:
+    with tab_convert:
+        render_production_converter()
+
+# ====================================================
+# TAB 2: MASTER LIST MANAGEMENT (ADMIN ONLY)
+# ====================================================
+def render_production_master():
+    st.subheader("🏷️ จัดการตาราง Master Data Model & Mapping")
+    st.caption("คุณสามารถดับเบิลคลิกแก้ไขข้อมูลในตารางด้านล่างนี้ได้โดยตรงเหมือนใช้ Excel เมื่อแก้ไขเสร็จแล้วให้กดปุ่ม 'บันทึก Master List'")
+
+    df_master_current = load_master_mapping()
+
+    edited_master = st.data_editor(
+        df_master_current,
+        num_rows="dynamic",
+        use_container_width=True,
+        height=500,
+        key="master_editor"
+    )
+
+    col_btn_save, col_info = st.columns([1, 3])
+    with col_btn_save:
+        if st.button("💾 บันทึก Master List", type="primary", use_container_width=True):
+            save_master_mapping(edited_master)
+            st.success("บันทึกข้อมูล Master Data Model เรียบร้อยแล้ว!")
+            st.rerun()
+
+    with col_info:
+        st.caption(f"📁 ไฟล์ Master ถูกจัดเก็บไว้ที่: `{os.path.basename(MASTER_FILE)}` (เปิดแก้ไขด้วย Excel ได้เช่นกัน)")
+
+if is_admin and tab_master is not None:
+    with tab_master:
+        render_production_master()
+
+# ====================================================
+# TAB 3: CHARTS & VISUALIZATIONS
+# ====================================================
+with tab_charts:
+    st.subheader("📊 สรุปสถิติและแนวโน้มการผลิต (Monthly Production Statistics & Trends)")
+
+    if 'df_flat_wide' in st.session_state and not st.session_state['df_flat_wide'].empty:
+        df_data = st.session_state['df_flat_wide'].copy()
+
+        if 'ลำดับเดือน' not in df_data.columns:
+            df_data['ลำดับเดือน'] = df_data['เดือน'].map(MONTH_ORDER).fillna(99)
+
+        # Executive Summary & Quick Download Bar (UI Pro Max Bento Style)
+        p_months = df_data[['เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')['เดือน'].tolist()
+        num_m = len(p_months)
+        latest_m = p_months[-1] if p_months else "ล่าสุด"
+        
+        tot_gas_daily = df_data.groupby('เดือน')['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)'].sum().mean() if 'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)' in df_data.columns else 0
+        tot_oil_daily = df_data.groupby('เดือน')['น้ำมันดิบ (บาร์เรล/วัน)'].sum().mean() if 'น้ำมันดิบ (บาร์เรล/วัน)' in df_data.columns else 0
+        tot_cnd_daily = df_data.groupby('เดือน')['ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)'].sum().mean() if 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)' in df_data.columns else 0
+        tot_boed_daily = df_data.groupby('เดือน')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().mean() if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_data.columns else 0
+        
+        c_hero1, c_hero2 = st.columns([3, 1.2])
+        with c_hero1:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(224, 242, 254, 0.6) 0%, rgba(240, 249, 255, 0.85) 100%); border: 1px solid rgba(186, 230, 253, 0.8); border-radius: 14px; padding: 12px 18px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(2, 132, 199, 0.05);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 14px; font-weight: 800; color: #0369A1;">
+                        🛢️ ภาพรวมการผลิตปิโตรเลียมเฉลี่ย {num_m} เดือน (มกราคม - {latest_m} 2569)
+                    </span>
+                    <span style="background: #0284C7; color: white; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 12px;">
+                        ACTIVE TELEMETRY
+                    </span>
+                </div>
+                <div style="font-size: 12px; color: #334155; line-height: 1.6;">
+                    • <b>การผลิตรวมเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0284C7;">{tot_boed_daily:,.0f} BOED</span> &nbsp;|&nbsp; 
+                    • <b>ก๊าซธรรมชาติเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_gas_daily:,.1f} MMSCFD</span><br/>
+                    • <b>น้ำมันดิบเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_oil_daily:,.0f} BPD</span> &nbsp;|&nbsp; 
+                    • <b>คอนเดนเสทเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_cnd_daily:,.0f} BPD</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_hero2:
+            buf_p_quick = io.BytesIO()
+            with pd.ExcelWriter(buf_p_quick, engine='openpyxl') as wr_p:
+                df_data.to_excel(wr_p, sheet_name='Flat_Wide', index=False)
+            buf_p_quick.seek(0)
+            st.download_button(
+                label="📥 ดาวน์โหลด Flat Table รวม (.xlsx)",
+                data=buf_p_quick,
+                file_name=f"petroleum_production_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_dl_prod_quick"
+            )
+            st.caption(f"💡 ข้อมูล Flat Wide {len(df_data):,} แถว ({num_m} เดือน)")
+
+        with st.expander("🔍 กรองข้อมูลภาพรวม (Area & Operator Filter)", expanded=False):
+            c_filter1, c_filter2 = st.columns(2)
+            with c_filter1:
+                all_areas = sorted(df_data['พื้นที่'].dropna().unique())
+                sel_area = st.multiselect("กรองตามพื้นที่ (Area):", options=all_areas, default=all_areas)
+        with c_filter2:
+            all_ops = sorted(df_data['ผู้ดำเนินการ'].dropna().unique())
+            sel_op = st.multiselect("กรองตามผู้ดำเนินการ (Operator):", options=all_ops, default=all_ops)
+
+        df_filtered = df_data[(df_data['พื้นที่'].isin(sel_area)) & (df_data['ผู้ดำเนินการ'].isin(sel_op))].copy()
+
+        if df_filtered.empty:
+            st.warning("⚠️ ไม่พบข้อมูลตามเงื่อนไขที่เลือก กรุณาเลือกพื้นที่หรือผู้ดำเนินการอย่างน้อย 1 รายการ")
+        else:
+            subtab_trend, subtab_op, subtab_spotlight, subtab_overall = st.tabs([
+                "📅 1. แนวโน้มรายเดือน (Monthly Trends)",
+                "🏢 2. แนวโน้มแยกตาม Operator & พื้นที่",
+                "🔍 3. เจาะลึกสถิติประจำเดือน (Monthly Deep-Dive)",
+                "🥧 4. ภาพรวมสัดส่วนสะสม (Market Share & Basins)"
+            ])
+
+            # ----------------------------------------------------
+            # Subtab 1: Monthly Trends & Native Units
+            # ----------------------------------------------------
+            with subtab_trend:
+                cols_to_sum = {
+                    'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'sum',
+                    'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'sum',
+                    'น้ำมันดิบ (บาร์เรล/วัน)': 'sum',
+                    'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'sum',
+                    'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'sum',
+                    'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'sum'
+                }
+                avail_cols = {k: v for k, v in cols_to_sum.items() if k in df_filtered.columns}
+                df_monthly = df_filtered.groupby(['เดือน', 'ลำดับเดือน'], as_index=False).agg(avail_cols).sort_values('ลำดับเดือน').reset_index(drop=True)
+
+                # MoM calculation
+                for col in ['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)', 'น้ำมันดิบ (บาร์เรล/วัน)', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)']:
+                    if col in df_monthly.columns:
+                        df_monthly[f'{col}_MoM_diff'] = df_monthly[col].diff()
+                        df_monthly[f'{col}_MoM_pct'] = (df_monthly[f'{col}_MoM_diff'] / df_monthly[col].shift(1)) * 100
+
+                if not df_monthly.empty:
+                    latest_row = df_monthly.iloc[-1]
+                    st.markdown(f"##### 📌 สถิติการผลิตประจำเดือนล่าสุด: **{latest_row['เดือน']}**")
+                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+                    with kpi1:
+                        v = latest_row.get('ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 0)
+                        p = latest_row.get('ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)_MoM_pct', None)
+                        st.metric("💨 ก๊าซธรรมชาติ", f"{v:,.1f} MMSCFD", f"{p:+.1f}% MoM" if pd.notna(p) else None)
+                    with kpi2:
+                        v = latest_row.get('ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)', 0)
+                        p = latest_row.get('ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)_MoM_pct', None)
+                        st.metric("💧 ก๊าซธรรมชาติเหลว", f"{v:,.0f} BPD", f"{p:+.1f}% MoM" if pd.notna(p) else None)
+                    with kpi3:
+                        v = latest_row.get('น้ำมันดิบ (บาร์เรล/วัน)', 0)
+                        p = latest_row.get('น้ำมันดิบ (บาร์เรล/วัน)_MoM_pct', None)
+                        st.metric("🛢️ น้ำมันดิบ", f"{v:,.0f} BPD", f"{p:+.1f}% MoM" if pd.notna(p) else None)
+                    with kpi4:
+                        v = latest_row.get('รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)', 0)
+                        p = latest_row.get('รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)_MoM_pct', None)
+                        st.metric("⚡ รวมเทียบเท่าน้ำมันดิบ", f"{v:,.0f} BOED", f"{p:+.1f}% MoM" if pd.notna(p) else None)
+
+                    st.markdown("---")
+
+                    # 1. Total BOED Stacked Bar Chart
+                    st.markdown("#### 1.1 แนวโน้มปริมาณการผลิตรวมเทียบเท่าน้ำมันดิบรายเดือน (BOED)")
+                    boed_parts = [
+                        'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                        'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                        'น้ำมันดิบ (บาร์เรล/วัน)'
+                    ]
+                    boed_avail = [c for c in boed_parts if c in df_monthly.columns]
+                    if boed_avail:
+                        fig_boed = px.bar(
+                            df_monthly,
+                            x='เดือน',
+                            y=boed_avail,
+                            barmode='stack',
+                            title="ปริมาณการผลิตรวมเทียบเท่าน้ำมันดิบรายเดือน (BOED)",
+                            labels={'value': 'ปริมาณ (BOED)', 'variable': 'ประเภทเชื้อเพลิง', 'เดือน': 'เดือน'},
+                            color_discrete_map={
+                                'ก๊าซธรรมชาติ_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': '#0284C7',
+                                'ก๊าซธรรมชาติเหลว_เทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': '#7C3AED',
+                                'น้ำมันดิบ (บาร์เรล/วัน)': '#EA580C'
+                            }
+                        )
+                        fig_boed.update_layout(
+                            hovermode="x unified",
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        apply_crystal_aqua_theme(fig_boed)
+                        st.plotly_chart(fig_boed, use_container_width=True)
+
+                    # 2. Native Units 3 Columns
+                    st.markdown("#### 1.2 แนวโน้มรายเดือนแยกตาม 3 ผลิตภัณฑ์หลัก (หน่วยจริง)")
+                    col_c1, col_c2, col_c3 = st.columns(3)
+                    with col_c1:
+                        if 'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)' in df_monthly.columns:
+                            fig_gas = px.bar(
+                                df_monthly, x='เดือน', y='ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)',
+                                text_auto='.1f', title="💨 ก๊าซธรรมชาติ (MMSCFD)",
+                                color_discrete_sequence=['#0284C7']
+                            )
+                            fig_gas.update_traces(textposition='outside')
+                            fig_gas.update_layout(yaxis_title='MMSCFD', xaxis_title='')
+                            apply_crystal_aqua_theme(fig_gas)
+                            st.plotly_chart(fig_gas, use_container_width=True)
+
+                    with col_c2:
+                        if 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)' in df_monthly.columns:
+                            fig_cond = px.bar(
+                                df_monthly, x='เดือน', y='ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+                                text_auto=',.0f', title="💧 ก๊าซธรรมชาติเหลว (BPD)",
+                                color_discrete_sequence=['#7C3AED']
+                            )
+                            fig_cond.update_traces(textposition='outside')
+                            fig_cond.update_layout(yaxis_title='BPD', xaxis_title='')
+                            apply_crystal_aqua_theme(fig_cond)
+                            st.plotly_chart(fig_cond, use_container_width=True)
+
+                    with col_c3:
+                        if 'น้ำมันดิบ (บาร์เรล/วัน)' in df_monthly.columns:
+                            fig_crude = px.bar(
+                                df_monthly, x='เดือน', y='น้ำมันดิบ (บาร์เรล/วัน)',
+                                text_auto=',.0f', title="🛢️ น้ำมันดิบ (BPD)",
+                                color_discrete_sequence=['#EA580C']
+                            )
+                            fig_crude.update_traces(textposition='outside')
+                            fig_crude.update_layout(yaxis_title='BPD', xaxis_title='')
+                            apply_crystal_aqua_theme(fig_crude)
+                            st.plotly_chart(fig_crude, use_container_width=True)
+
+                    # 3. Monthly Summary Data Table
+                    st.markdown("#### 1.3 ตารางสรุปตัวเลขสถิติรายเดือน")
+                    display_cols = [
+                        'เดือน',
+                        'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)',
+                        'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+                        'น้ำมันดิบ (บาร์เรล/วัน)',
+                        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)_MoM_diff',
+                        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)_MoM_pct'
+                    ]
+                    cols_in_table = [c for c in display_cols if c in df_monthly.columns]
+                    df_table_show = df_monthly[cols_in_table].copy()
+                    rename_map = {
+                        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)_MoM_diff': 'เปลี่ยนแปลง MoM (BOED)',
+                        'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)_MoM_pct': 'MoM (%)'
+                    }
+                    df_table_show.rename(columns=rename_map, inplace=True)
+                    st.dataframe(
+                        df_table_show.style.format({
+                            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': '{:,.1f}',
+                            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': '{:,.0f}',
+                            'น้ำมันดิบ (บาร์เรล/วัน)': '{:,.0f}',
+                            'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': '{:,.0f}',
+                            'เปลี่ยนแปลง MoM (BOED)': lambda x: f"{x:+,.0f}" if pd.notna(x) else "-",
+                            'MoM (%)': lambda x: f"{x:+.2f}%" if pd.notna(x) else "-"
+                        }),
+                        use_container_width=True
+                    )
+
+            # ----------------------------------------------------
+            # Subtab 2: Monthly Operator & Region Breakdown
+            # ----------------------------------------------------
+            with subtab_op:
+                st.markdown("#### 2.1 แนวโน้มปริมาณการผลิตรายเดือนตาม Operator (BOED)")
+                if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_filtered.columns and 'ผู้ดำเนินการ' in df_filtered.columns:
+                    df_op_m = df_filtered.groupby(['ผู้ดำเนินการ', 'เดือน', 'ลำดับเดือน'], as_index=False)['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().sort_values('ลำดับเดือน')
+                    all_op_list = sorted(df_filtered['ผู้ดำเนินการ'].dropna().unique())
+                    top_default = df_filtered.groupby('ผู้ดำเนินการ')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().nlargest(6).index.tolist()
+
+                    sel_ops_chart = st.multiselect(
+                        "เลือก Operator ที่ต้องการเปรียบเทียบในกราฟเส้น:",
+                        options=all_op_list,
+                        default=top_default
+                    )
+
+                    df_op_m_filtered = df_op_m[df_op_m['ผู้ดำเนินการ'].isin(sel_ops_chart)]
+                    if not df_op_m_filtered.empty:
+                        fig_op_line = px.line(
+                            df_op_m_filtered,
+                            x='เดือน',
+                            y='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                            color='ผู้ดำเนินการ',
+                            markers=True,
+                            title="แนวโน้มการผลิตรายเดือนจำแนกตาม Operator (BOED)",
+                            labels={'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'ปริมาณ (BOED)', 'เดือน': 'เดือน'},
+                            color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
+                        )
+                        fig_op_line.update_layout(hovermode="x unified")
+                        apply_crystal_aqua_theme(fig_op_line)
+                        st.plotly_chart(fig_op_line, use_container_width=True)
+
+                st.markdown("#### 2.2 เปรียบเทียบการผลิต Onshore vs Offshore รายเดือน (BOED)")
+                if 'พื้นที่' in df_filtered.columns and 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_filtered.columns:
+                    df_reg_m = df_filtered.groupby(['พื้นที่', 'เดือน', 'ลำดับเดือน'], as_index=False)['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().sort_values('ลำดับเดือน')
+                    fig_reg = px.bar(
+                        df_reg_m,
+                        x='เดือน',
+                        y='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                        color='พื้นที่',
+                        barmode='group',
+                        title="ปริมาณการผลิต บนบก (Onshore) เทียบกับ ในทะเล (Offshore) แต่ละเดือน",
+                        labels={'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'ปริมาณ (BOED)', 'เดือน': 'เดือน'},
+                        color_discrete_map={'บนบก': '#EA580C', 'ในทะเล': '#0284C7'}
+                    )
+                    apply_crystal_aqua_theme(fig_reg)
+                    st.plotly_chart(fig_reg, use_container_width=True)
+
+            # ----------------------------------------------------
+            # Subtab 3: Monthly Deep-Dive / Spotlight
+            # ----------------------------------------------------
+            with subtab_spotlight:
+                st.markdown("#### 3. เจาะลึกสถิติประจำเดือน (Monthly Deep-Dive)")
+                all_months_ordered = df_filtered[['เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน', ascending=False)['เดือน'].tolist()
+                
+                sel_dive_month = st.selectbox(
+                    "📅 เลือกเดือนที่ต้องการเจาะลึกข้อมูล:",
+                    options=all_months_ordered,
+                    index=0
+                )
+
+                df_spot = df_filtered[df_filtered['เดือน'] == sel_dive_month].copy()
+
+                if not df_spot.empty:
+                    # Metric row for selected month
+                    m_gas = df_spot['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)'].sum() if 'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)' in df_spot.columns else 0
+                    m_cond = df_spot['ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)'].sum() if 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)' in df_spot.columns else 0
+                    m_crude = df_spot['น้ำมันดิบ (บาร์เรล/วัน)'].sum() if 'น้ำมันดิบ (บาร์เรล/วัน)' in df_spot.columns else 0
+                    m_boed = df_spot['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum() if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_spot.columns else 0
+
+                    c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+                    c_m1.metric("💨 ก๊าซธรรมชาติ", f"{m_gas:,.1f} MMSCFD")
+                    c_m2.metric("💧 ก๊าซธรรมชาติเหลว", f"{m_cond:,.0f} BPD")
+                    c_m3.metric("🛢️ น้ำมันดิบ", f"{m_crude:,.0f} BPD")
+                    c_m4.metric("⚡ รวมเทียบเท่า", f"{m_boed:,.0f} BOED")
+
+                    st.markdown("---")
+
+                    col_spot_left, col_spot_right = st.columns([3, 2])
+
+                    with col_spot_left:
+                        st.markdown(f"##### 🏆 Top 10 แหล่งผลิตสูงสุดในเดือน **{sel_dive_month}** (BOED)")
+                        if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_spot.columns:
+                            df_top10 = df_spot.nlargest(10, 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)').sort_values('รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)', ascending=True)
+                            fig_top10 = px.bar(
+                                df_top10,
+                                x='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                                y='แหล่ง_ไฟล์ดิบ',
+                                orientation='h',
+                                text_auto=',.0f',
+                                title=f"Top 10 แหล่งผลิตสูงสุด ({sel_dive_month})",
+                                labels={'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': 'ปริมาณเทียบเท่าน้ำมันดิบ (BOED)', 'แหล่ง_ไฟล์ดิบ': 'ชื่อแหล่ง'},
+                                color='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                                color_continuous_scale=['#BAE6FD', '#0284C7', '#023E8A']
+                            )
+                            fig_top10.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'})
+                            apply_crystal_aqua_theme(fig_top10)
+                            st.plotly_chart(fig_top10, use_container_width=True)
+
+                    with col_spot_right:
+                        st.markdown(f"##### 🏢 สัดส่วน Operator เดือน **{sel_dive_month}**")
+                        if 'ผู้ดำเนินการ' in df_spot.columns and 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_spot.columns:
+                            df_spot_op = df_spot.groupby('ผู้ดำเนินการ')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().reset_index()
+                            fig_spot_op = px.pie(
+                                df_spot_op,
+                                names='ผู้ดำเนินการ',
+                                values='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                                hole=0.45,
+                                title=f"สัดส่วน Operator ({sel_dive_month})",
+                                color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
+                            )
+                            apply_crystal_aqua_theme(fig_spot_op)
+                            st.plotly_chart(fig_spot_op, use_container_width=True)
+
+                    # Table of all fields in selected month
+                    with st.expander(f"📋 ดูตารางแสดงข้อมูลทุกแหล่งในเดือน {sel_dive_month} (ทั้งหมด {len(df_spot)} แหล่ง)"):
+                        show_cols_spot = [
+                            'พื้นที่', 'ผู้ดำเนินการ', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ',
+                            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+                            'น้ำมันดิบ (บาร์เรล/วัน)', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+                        ]
+                        cols_available_spot = [c for c in show_cols_spot if c in df_spot.columns]
+                        st.dataframe(
+                            df_spot[cols_available_spot].sort_values('รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)', ascending=False).style.format({
+                                'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': '{:,.2f}',
+                                'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': '{:,.1f}',
+                                'น้ำมันดิบ (บาร์เรล/วัน)': '{:,.1f}',
+                                'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)': '{:,.1f}'
+                            }),
+                            use_container_width=True
+                        )
+
+            # ----------------------------------------------------
+            # Subtab 4: Overall Market Share & Basins
+            # ----------------------------------------------------
+            with subtab_overall:
+                st.markdown("#### 4. ภาพรวมสัดส่วนสะสมทั้งปี (Overall Cumulative Share)")
+                chart_col1, chart_col2 = st.columns(2)
+                with chart_col1:
+                    st.markdown("##### 🏢 สัดส่วนการผลิตตาม Operator รวมสะสม (BOED)")
+                    if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_filtered.columns:
+                        df_op_total = df_filtered.groupby('ผู้ดำเนินการ')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().reset_index()
+                        fig_op_total = px.pie(
+                            df_op_total,
+                            names='ผู้ดำเนินการ',
+                            values='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                            hole=0.45,
+                            color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
+                        )
+                        apply_crystal_aqua_theme(fig_op_total)
+                        st.plotly_chart(fig_op_total, use_container_width=True)
+
+                with chart_col2:
+                    st.markdown("##### 🌊 สัดส่วนการผลิตตามแอ่งปิโตรเลียม (Basin) รวมสะสม")
+                    if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_filtered.columns and 'แอ่งปิโตรเลียม' in df_filtered.columns:
+                        df_basin_total = df_filtered.groupby('แอ่งปิโตรเลียม')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().reset_index()
+                        fig_basin_total = px.pie(
+                            df_basin_total,
+                            names='แอ่งปิโตรเลียม',
+                            values='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                            hole=0.45,
+                            color_discrete_sequence=['#0284C7', '#0096C7', '#023E8A', '#48CAE4', '#90E0EF', '#ADE8F4']
+                        )
+                        apply_crystal_aqua_theme(fig_basin_total)
+                        st.plotly_chart(fig_basin_total, use_container_width=True)
+
+                if 'ประเภทสัญญา' in df_filtered.columns and 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_filtered.columns:
+                    st.markdown("##### 📜 สัดส่วนการผลิตตามประเภทสัญญา (Concession vs PSC)")
+                    df_contract_total = df_filtered.groupby('ประเภทสัญญา')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().reset_index()
+                    fig_contract = px.pie(
+                        df_contract_total,
+                        names='ประเภทสัญญา',
+                        values='รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                        hole=0.45,
+                        color_discrete_sequence=['#023E8A', '#0284C7', '#7C3AED']
+                    )
+                    apply_crystal_aqua_theme(fig_contract)
+                    st.plotly_chart(fig_contract, use_container_width=True)
+    else:
+        if st.session_state.get('user_role', 'viewer') == 'admin':
+            st.info("💡 ยังไม่มีข้อมูลการผลิตในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync การผลิต' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
+        else:
+            st.info("💡 ขณะนี้ยังไม่มีข้อมูลการผลิตในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อรัน Auto Sync ข้อมูลล่าสุดครับ")
+
+# ====================================================
+# TAB 4: PTIT DOMESTIC PRODUCTION REPORT
+# ====================================================
+with tab_ptit_report:
+    st.subheader("📑 รายงานปริมาณการผลิตปิโตรเลียมในประเทศ (PTIT Domestic Production Report)")
+    st.caption("ตารางรายงานสรุปรายเดือนตามมาตรฐานของ สถาบันปิโตรเลียมแห่งประเทศไทย (PTIT Focus Statistics)")
+
+    if 'df_flat_wide' in st.session_state:
+        df_all_data = st.session_state['df_flat_wide']
+
+        # Month Selector
+        if 'ลำดับเดือน' not in df_all_data.columns:
+            df_all_data['ลำดับเดือน'] = df_all_data['เดือน'].map(MONTH_ORDER).fillna(99)
+
+        avail_months = df_all_data[['ปี', 'เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')
+        month_options = [f"{r['เดือน']} ปี {r['ปี']}" for _, r in avail_months.iterrows()]
+
+        sel_col1, sel_col2, sel_col3 = st.columns([1.5, 1.8, 1.4])
+        with sel_col1:
+            selected_month_label = st.selectbox("เลือกเดือนที่ต้องการแสดงรายงาน:", month_options, index=len(month_options)-1)
+
+        # Parse selected month and year
+        sel_month = selected_month_label.split()[0]
+        sel_year = selected_month_label.split()[-1]
+
+        # Ensure PTIT columns exist (Self-healing from Master)
+        if 'PTIT_Region' not in df_all_data.columns:
+            if 'Lookup_Key' not in df_all_data.columns and 'แปลง_ไฟล์ดิบ' in df_all_data.columns:
+                df_all_data['Lookup_Key'] = df_all_data['พื้นที่'].astype(str) + '_' + df_all_data['แปลง_ไฟล์ดิบ'].astype(str) + '_' + df_all_data['แหล่ง_ไฟล์ดิบ'].astype(str)
+            df_m = load_master_mapping()
+            cols_to_add = [c for c in ['Lookup_Key', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'] if c in df_m.columns]
+            if 'Lookup_Key' in df_all_data.columns:
+                df_all_data = pd.merge(df_all_data, df_m[cols_to_add], on='Lookup_Key', how='left')
+                st.session_state['df_flat_wide'] = df_all_data
+
+        # Filter data for chosen month
+        df_month_data = df_all_data[(df_all_data['เดือน'] == sel_month) & (df_all_data['ปี'].astype(str) == sel_year)].copy()
+
+        # DEDP Fang Input & Toggle for Zero Fields
+        with sel_col2:
+            default_fang = 610.4 if sel_month == 'มิถุนายน' else 0.0
+            fang_val = st.number_input(
+                "ค่าน้ำมันดิบ แหล่งฝาง (Fang - DEDP) [BPD]:",
+                min_value=0.0,
+                value=default_fang,
+                step=10.0,
+                help="ข้อมูลแหล่งฝางสังกัดกรมการพลังงานทหาร (DEDP) ซึ่งไม่ได้อยู่ในรายงานของกรมเชื้อเพลิงฯ"
+            )
+        with sel_col3:
+            st.write("")
+            st.write("")
+            show_zero_fields = st.checkbox("แสดงแหล่งที่ยอดผลิตเป็น 0", value=False, help="หากติ๊กเลือก จะแสดงแหล่งที่ไม่มีการผลิตในเดือนนั้น เช่น PTTEPI / G8/50")
+
+        # Group and Aggregate by PTIT Operator / Field
+        # Group keys: PTIT_Region, PTIT_Operator_Field, PTIT_Order
+        df_agg = df_month_data.groupby(['PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'], as_index=False).agg({
+            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'sum',
+            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'sum',
+            'น้ำมันดิบ (บาร์เรล/วัน)': 'sum'
+        }).rename(columns={
+            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'Gas',
+            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'Cond',
+            'น้ำมันดิบ (บาร์เรล/วัน)': 'Crude',
+            'PTIT_Region': 'Region',
+            'PTIT_Operator_Field': 'Operator_Field',
+            'PTIT_Order': 'Order'
+        })
+
+        # Append Fang if > 0
+        if fang_val > 0:
+            df_fang_row = pd.DataFrame([{
+                'Region': 'Onshore',
+                'Operator_Field': 'Defence Energy Department / Fang',
+                'Order': 13,
+                'Gas': 0.0,
+                'Cond': 0.0,
+                'Crude': float(fang_val)
+            }])
+            df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+
+        if not show_zero_fields:
+            df_agg = df_agg[(df_agg['Gas'] >= 0.001) | (df_agg['Cond'] >= 0.001) | (df_agg['Crude'] >= 0.001)].reset_index(drop=True)
+
+        df_agg = df_agg.sort_values('Order').reset_index(drop=True)
+
+        # Calculate Subtotals
+        onshore_items = df_agg[df_agg['Region'] == 'Onshore'].to_dict('records')
+        offshore_items = df_agg[df_agg['Region'] == 'Offshore'].to_dict('records')
+
+        onshore_sub = (
+            sum(x['Gas'] for x in onshore_items),
+            sum(x['Cond'] for x in onshore_items),
+            sum(x['Crude'] for x in onshore_items)
+        )
+        offshore_sub = (
+            sum(x['Gas'] for x in offshore_items),
+            sum(x['Cond'] for x in offshore_items),
+            sum(x['Crude'] for x in offshore_items)
+        )
+        grand_total = (
+            onshore_sub[0] + offshore_sub[0],
+            onshore_sub[1] + offshore_sub[1],
+            onshore_sub[2] + offshore_sub[2]
+        )
+
+        # Export Buttons
+        btn_c1, btn_c2 = st.columns([2, 3])
+        with btn_c1:
+            excel_buf = export_ptit_styled_excel(
+                sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total
+            )
+            st.download_button(
+                label=f"📥 ดาวน์โหลด Excel ตาราง PTIT ({sel_month} {sel_year})",
+                data=excel_buf,
+                file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
+
+        # HTML Table Generator
+        def fmt(val, is_bpd=False):
+            if val is None or val == 0:
+                return "&nbsp;"
+            if val < 0.05:
+                return "0.0"
+            if is_bpd:
+                return f"{val:,.1f}"
+            return f"{val:.1f}"
+
+        html_table = f"""
+        <style>
+            .ptit-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                font-size: 13.5px;
+                color: #222;
+                margin-top: 15px;
+            }}
+            .ptit-table th, .ptit-table td {{
+                border: 1px solid #dcdcdc;
+                padding: 5px 12px;
+            }}
+            .header-main {{
+                background-color: #7A5B3E;
+                color: #ffffff;
+                text-align: center;
+                font-weight: 600;
+            }}
+            .header-sec {{
+                background-color: #B49470;
+                color: #ffffff;
+                font-weight: bold;
+            }}
+            .row-sec {{
+                background-color: #B49470;
+                color: #ffffff;
+                font-weight: bold;
+            }}
+            .row-sec td {{
+                border: 1px solid #a6845e;
+            }}
+            .row-item:hover {{
+                background-color: #f7f5f2;
+            }}
+            .row-total {{
+                background-color: #f4efe9;
+                font-weight: bold;
+                border-top: 2px solid #333;
+                border-bottom: 3px double #333;
+            }}
+            .num {{
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }}
+            .footer-note {{
+                font-size: 11.5px;
+                color: #555;
+                margin-top: 8px;
+            }}
+        </style>
+
+        <table class="ptit-table">
+            <thead>
+                <tr>
+                    <th rowspan="2" class="header-main" style="width: 45%;">Operator / Field</th>
+                    <th colspan="3" class="header-main">Domestic Production</th>
+                </tr>
+                <tr>
+                    <th class="header-main" style="width: 18%;">Natural Gas<br><span style="font-size:11px; font-weight:normal;">(MMSCFD)</span></th>
+                    <th class="header-main" style="width: 18%;">Condensate<br><span style="font-size:11px; font-weight:normal;">(BPD)</span></th>
+                    <th class="header-main" style="width: 19%;">Crude<br><span style="font-size:11px; font-weight:normal;">(BPD)</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Onshore Header -->
+                <tr class="row-sec">
+                    <td>Onshore</td>
+                    <td class="num">{fmt(onshore_sub[0])}</td>
+                    <td class="num">{fmt(onshore_sub[1], True)}</td>
+                    <td class="num">{fmt(onshore_sub[2], True)}</td>
+                </tr>
+        """
+
+        for it in onshore_items:
+            html_table += f"""
+                <tr class="row-item">
+                    <td style="padding-left: 22px;">{it['Operator_Field']}</td>
+                    <td class="num">{fmt(it['Gas'])}</td>
+                    <td class="num">{fmt(it['Cond'], True)}</td>
+                    <td class="num">{fmt(it['Crude'], True)}</td>
+                </tr>
+            """
+
+        html_table += f"""
+                <!-- Offshore Header -->
+                <tr class="row-sec">
+                    <td>Offshore</td>
+                    <td class="num">{fmt(offshore_sub[0])}</td>
+                    <td class="num">{fmt(offshore_sub[1], True)}</td>
+                    <td class="num">{fmt(offshore_sub[2], True)}</td>
+                </tr>
+        """
+
+        for it in offshore_items:
+            html_table += f"""
+                <tr class="row-item">
+                    <td style="padding-left: 22px;">{it['Operator_Field']}</td>
+                    <td class="num">{fmt(it['Gas'])}</td>
+                    <td class="num">{fmt(it['Cond'], True)}</td>
+                    <td class="num">{fmt(it['Crude'], True)}</td>
+                </tr>
+            """
+
+        html_table += f"""
+                <!-- Total -->
+                <tr class="row-total">
+                    <td style="text-align: center;">Total</td>
+                    <td class="num">{fmt(grand_total[0])}</td>
+                    <td class="num">{fmt(grand_total[1], True)}</td>
+                    <td class="num">{fmt(grand_total[2], True)}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer-note">
+            <div><b>Note:</b> &nbsp; Data shown as "0.0" means figure less than 0.05.</div>
+            <div style="margin-top: 3px;"><b>Source:</b> DMF, &nbsp;DEDP</div>
+        </div>
+        """
+
+        clean_html = "\n".join(line.strip() for line in html_table.splitlines())
+        if hasattr(st, 'html'):
+            st.html(clean_html)
+        else:
+            st.markdown(clean_html, unsafe_allow_html=True)
+
+    else:
+        if st.session_state.get('user_role', 'viewer') == 'admin':
+            st.info("💡 ยังไม่มีข้อมูลการผลิตในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync การผลิต' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
+        else:
+            st.info("💡 ขณะนี้ยังไม่มีข้อมูลการผลิตในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อรัน Auto Sync ข้อมูลล่าสุดครับ")
