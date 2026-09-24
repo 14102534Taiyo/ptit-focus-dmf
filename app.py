@@ -1455,33 +1455,31 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
             tot_annual_val = df_s_data['มูลค่าการขาย_บาท'].sum()
             tot_annual_roy = df_s_data['ค่าภาคหลวง_บาท'].sum()
             
-            c_sum1, c_sum2 = st.columns([3, 1.2])
-            with c_sum1:
-                st.markdown(f"""
-                <div style="background: linear-gradient(135deg, rgba(254, 243, 199, 0.45) 0%, rgba(255, 251, 235, 0.7) 100%); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 10px 16px; margin-bottom: 12px;">
-                    <div style="font-size: 13.5px; font-weight: 700; color: #92400E;">
-                        📊 สรุปข้อมูลยอดขายสะสม {len(s_months)} เดือน (มกราคม - {s_months[-1] if s_months else ''})
+            # Executive Summary Bar (Clean, Focused on Sales Metrics)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(254, 243, 199, 0.5) 0%, rgba(255, 251, 235, 0.8) 100%); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 14px 20px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(217, 119, 6, 0.05); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <span style="font-size: 14.5px; font-weight: 800; color: #92400E;">
+                            📊 สรุปข้อมูลยอดขายสะสม {len(s_months)} เดือน (มกราคม - {s_months[-1] if s_months else ''})
+                        </span>
+                        <span style="background: #D97706; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.04em;">
+                            FISCAL TELEMETRY
+                        </span>
                     </div>
-                    <div style="font-size: 12px; color: #78350F; margin-top: 3px;">
+                    <div style="font-size: 12.5px; color: #78350F; line-height: 1.6;">
                         • มูลค่าการจำหน่ายสะสม: <b>{tot_annual_val/1e9:,.2f} พันล้านบาท</b> &nbsp;|&nbsp; 
                         • ค่าภาคหลวงจัดเก็บสะสม: <b>{tot_annual_roy/1e9:,.2f} พันล้านบาท</b> &nbsp;|&nbsp; 
                         • สัดส่วนค่าภาคหลวงเฉลี่ย: <b>{(tot_annual_roy/tot_annual_val*100) if tot_annual_val else 0:.2f}%</b>
                     </div>
                 </div>
-                """, unsafe_allow_html=True)
-            with c_sum2:
-                buf_s_quick = io.BytesIO()
-                with pd.ExcelWriter(buf_s_quick, engine='openpyxl') as wr:
-                    df_s_data.to_excel(wr, sheet_name='Sale_Flat_Table', index=False)
-                buf_s_quick.seek(0)
-                st.download_button(
-                    label="📥 ดาวน์โหลด Flat Table (.xlsx)",
-                    data=buf_s_quick,
-                    file_name=f"petroleum_sale_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="btn_dl_s_quick"
-                )
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); font-size: 11.5px; font-weight: 600; color: #92400E; padding: 6px 14px; border-radius: 20px;">
+                        💰 ฐานข้อมูลยอดขาย {len(df_s_data):,} แถว ({len(s_months)} เดือน)
+                    </span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
             with st.expander("🔍 กรองข้อมูลสถิติยอดขาย (Filters)", expanded=False):
                 c_sf1, c_sf2, c_sf3 = st.columns(3)
@@ -1893,17 +1891,86 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
                 height=500
             )
 
-            buf_rep = io.BytesIO()
-            with pd.ExcelWriter(buf_rep, engine='openpyxl') as w_rep:
-                df_rep_show.to_excel(w_rep, sheet_name=f'Sale_{sel_s_month}', index=False)
-            buf_rep.seek(0)
-            st.download_button(
-                label=f"📥 ดาวน์โหลดรายงานประจำเดือน {sel_s_month} (Excel .xlsx)",
-                data=buf_rep,
-                file_name=f"DMF_Petroleum_Sale_{sel_s_month}_2569.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="btn_dl_s_report"
-            )
+            # Action Toolbar: UI/UX Pro Max Dual Export Hub (Sales)
+            st.markdown("""
+            <div style="display: flex; align-items: center; gap: 8px; margin: 18px 0 12px 0;">
+                <span style="font-size: 16px;">📦</span>
+                <span style="font-weight: 800; font-size: 14.5px; color: #0F172A;">ศูนย์ดาวน์โหลดข้อมูลและรายงานยอดขาย (Sales Export Center)</span>
+                <span style="background: rgba(217, 119, 6, 0.12); color: #B45309; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 12px; margin-left: 4px;">
+                    DUAL FORMAT
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_sx1, col_sx2 = st.columns(2, gap="medium")
+            with col_sx1:
+                st.markdown(f"""
+                <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                                📑 รายงานยอดขายประจำเดือน ({sel_s_month})
+                            </span>
+                            <span style="background: rgba(217, 119, 6, 0.12); color: #B45309; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                                MONTHLY FISCAL
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                            ตารางสรุปปริมาณและมูลค่าการจำหน่าย ค่าภาคหลวง และราคาปากหลุม (Wellhead Price) ประจำเดือน <b>{sel_s_month} 2569</b>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                buf_rep = io.BytesIO()
+                with pd.ExcelWriter(buf_rep, engine='openpyxl') as w_rep:
+                    df_rep_show.to_excel(w_rep, sheet_name=f'Sale_{sel_s_month}', index=False)
+                buf_rep.seek(0)
+                st.download_button(
+                    label=f"📥 ดาวน์โหลดรายงานประจำเดือน {sel_s_month} (.xlsx)",
+                    data=buf_rep,
+                    file_name=f"DMF_Petroleum_Sale_{sel_s_month}_2569.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    use_container_width=True,
+                    key="btn_dl_s_report"
+                )
+
+            with col_sx2:
+                num_s_months = len(df_sale_flat['เดือน'].dropna().unique()) if 'df_sale_flat' in st.session_state else 1
+                total_s_rows = len(st.session_state['df_sale_flat']) if 'df_sale_flat' in st.session_state else len(df_rep_show)
+                st.markdown(f"""
+                <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                                📊 ฐานข้อมูลยอดขาย Flat Table สะสมทั้งปี
+                            </span>
+                            <span style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                                BI & PIVOT READY
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                            ฐานข้อมูลการจำหน่ายสะสม <b>{num_s_months} เดือน</b> ({total_s_rows:,} แถว) คอลัมน์ครบถ้วน พร้อมนำเข้า Power BI, Tableau หรือ Excel Data Model
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                buf_s_all = io.BytesIO()
+                with pd.ExcelWriter(buf_s_all, engine='openpyxl') as w_all:
+                    if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+                        st.session_state['df_sale_flat'].to_excel(w_all, sheet_name='Sale_Flat_Table', index=False)
+                    else:
+                        df_rep_show.to_excel(w_all, sheet_name='Sale_Flat_Table', index=False)
+                buf_s_all.seek(0)
+                st.download_button(
+                    label=f"📊 ดาวน์โหลดฐานข้อมูล Flat Table ยอดขายทั้งปี (.xlsx)",
+                    data=buf_s_all,
+                    file_name=f"petroleum_sale_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="secondary",
+                    use_container_width=True,
+                    key="btn_dl_s_flat_tab4"
+                )
         else:
             if st.session_state.get('user_role', 'viewer') == 'admin':
                 st.info("💡 ยังไม่มีข้อมูลยอดขายในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync ยอดขาย' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
@@ -2375,40 +2442,32 @@ with tab_charts:
         tot_cnd_daily = df_data.groupby('เดือน')['ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)'].sum().mean() if 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)' in df_data.columns else 0
         tot_boed_daily = df_data.groupby('เดือน')['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum().mean() if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_data.columns else 0
         
-        c_hero1, c_hero2 = st.columns([3, 1.2])
-        with c_hero1:
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, rgba(224, 242, 254, 0.6) 0%, rgba(240, 249, 255, 0.85) 100%); border: 1px solid rgba(186, 230, 253, 0.8); border-radius: 14px; padding: 12px 18px; margin-bottom: 14px; box-shadow: 0 4px 16px rgba(2, 132, 199, 0.05);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="font-size: 14px; font-weight: 800; color: #0369A1;">
+        # Executive Telemetry Hero Banner (Clean, Focused on Metrics)
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(224, 242, 254, 0.7) 0%, rgba(240, 249, 255, 0.9) 100%); border: 1px solid rgba(186, 230, 253, 0.85); border-radius: 14px; padding: 14px 20px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(2, 132, 199, 0.05); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                    <span style="font-size: 14.5px; font-weight: 800; color: #0369A1;">
                         🛢️ ภาพรวมการผลิตปิโตรเลียมเฉลี่ย {num_m} เดือน (มกราคม - {latest_m} 2569)
                     </span>
-                    <span style="background: #0284C7; color: white; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 12px;">
-                        ACTIVE TELEMETRY
+                    <span style="background: #0284C7; color: white; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.04em;">
+                        LIVE TELEMETRY
                     </span>
                 </div>
-                <div style="font-size: 12px; color: #334155; line-height: 1.6;">
+                <div style="font-size: 12.5px; color: #334155; line-height: 1.6;">
                     • <b>การผลิตรวมเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #0284C7;">{tot_boed_daily:,.0f} BOED</span> &nbsp;|&nbsp; 
                     • <b>ก๊าซธรรมชาติเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_gas_daily:,.1f} MMSCFD</span><br/>
                     • <b>น้ำมันดิบเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_oil_daily:,.0f} BPD</span> &nbsp;|&nbsp; 
                     • <b>คอนเดนเสทเฉลี่ย:</b> <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{tot_cnd_daily:,.0f} BPD</span>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
-        with c_hero2:
-            buf_p_quick = io.BytesIO()
-            with pd.ExcelWriter(buf_p_quick, engine='openpyxl') as wr_p:
-                df_data.to_excel(wr_p, sheet_name='Flat_Wide', index=False)
-            buf_p_quick.seek(0)
-            st.download_button(
-                label="📥 ดาวน์โหลด Flat Table รวม (.xlsx)",
-                data=buf_p_quick,
-                file_name=f"petroleum_production_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="btn_dl_prod_quick"
-            )
-            st.caption(f"💡 ข้อมูล Flat Wide {len(df_data):,} แถว ({num_m} เดือน)")
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(186, 230, 253, 0.9); font-size: 11.5px; font-weight: 600; color: #0369A1; padding: 6px 14px; border-radius: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+                    📊 สถิติสะสม {len(df_data):,} แถว ({num_m} เดือน)
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.expander("🔍 กรองข้อมูลภาพรวม (Area & Operator Filter)", expanded=False):
             c_filter1, c_filter2 = st.columns(2)
@@ -3034,22 +3093,96 @@ with tab_ptit_report:
         else:
             st.markdown(clean_bento, unsafe_allow_html=True)
 
-        # Action Toolbar
-        btn_c1, btn_c2 = st.columns([2.5, 3.5])
-        with btn_c1:
+        # ----------------------------------------------------
+        # UI/UX Pro Max: Dual Export & Distribution Center
+        # ----------------------------------------------------
+        st.markdown("""
+        <div style="display: flex; align-items: center; gap: 8px; margin: 18px 0 12px 0;">
+            <span style="font-size: 16px;">📦</span>
+            <span style="font-weight: 800; font-size: 14.5px; color: #0F172A;">ศูนย์ดาวน์โหลดข้อมูลและรายงาน (Export & Distribution Center)</span>
+            <span style="background: rgba(2, 132, 199, 0.1); color: #0284C7; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 12px; margin-left: 4px;">
+                DUAL FORMAT
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        exp_c1, exp_c2 = st.columns(2, gap="medium")
+        with exp_c1:
+            st.markdown(f"""
+            <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            📑 รายงานทางการ PTIT (Formatted Report)
+                        </span>
+                        <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                            EXECUTIVE READY
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                        จัดรูปแบบทางการสไตล์ PTIT Focus ประจำเดือน <b>{sel_month} {sel_year}</b> ในธีม <b>{selected_theme_label.split('(')[0].strip()}</b> พร้อมผลรวม Onshore / Offshore สำหรับเสนอผู้บริหารหรือพิมพ์รายงาน
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
             excel_buf = export_ptit_styled_excel(
                 sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total, theme=report_theme_key
             )
             st.download_button(
-                label=f"📥 ดาวน์โหลด Excel สไตล์ Luxury Executive ({report_theme_key.capitalize()} Theme)",
+                label=f"📥 ดาวน์โหลดตารางรายงาน PTIT ({sel_month} {sel_year})",
                 data=excel_buf,
                 file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}_{report_theme_key}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_dl_ptit_official_report"
             )
-        with btn_c2:
-            st.caption(f"✨ ตารางด้านล่างแสดงผลในรูปแบบ **{selected_theme_label.split('(')[0].strip()}** รองรับการพิมพ์และการบันทึกเป็น PDF สไตล์ Executive Letterhead (กด `Ctrl + P`)")
+
+        with exp_c2:
+            st.markdown(f"""
+            <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                            📊 ฐานข้อมูลดิบรวมทั้งปี (Flat Table Database)
+                        </span>
+                        <span style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                            POWER BI & PIVOT
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                        ฐานข้อมูล Flat Matrix รวมทั้งปี <b>{len(avail_months)} เดือน</b> ({len(df_all_data):,} แถว) โครงสร้าง 2D สะอาด ไม่มีเซลล์ผสาน เหมาะสำหรับวิเคราะห์ต่อด้วย Power BI, Tableau หรือ Excel Pivot
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            buf_flat = io.BytesIO()
+            with pd.ExcelWriter(buf_flat, engine='openpyxl') as wr_flat:
+                df_all_data.to_excel(wr_flat, sheet_name='Flat_Wide', index=False)
+                if 'df_flat_long' in st.session_state and not st.session_state['df_flat_long'].empty:
+                    st.session_state['df_flat_long'].to_excel(wr_flat, sheet_name='Flat_Long_Unpivoted', index=False)
+            buf_flat.seek(0)
+            st.download_button(
+                label=f"📊 ดาวน์โหลดฐานข้อมูล Flat Table รวมทั้งปี (.xlsx)",
+                data=buf_flat,
+                file_name=f"petroleum_production_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="secondary",
+                use_container_width=True,
+                key="btn_dl_flat_table_tab4"
+            )
+
+        st.markdown("""
+        <div style="margin: 10px 0 18px 0; padding: 9px 16px; background: rgba(248, 250, 252, 0.85); border: 1px dashed #CBD5E1; border-radius: 10px; font-size: 12px; color: #475569; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span>✨</span>
+                <span><b>คำแนะนำการพิมพ์ / บันทึก PDF:</b> ตารางด้านล่างแสดงผลสไตล์ Executive Letterhead สามารถกด <kbd style="background: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Ctrl + P</kbd> บนคีย์บอร์ดเพื่อสั่งพิมพ์หรือบันทึกเป็น PDF ได้ทันที</span>
+            </div>
+            <span style="font-size: 11px; color: #94A3B8;">PTIT Focus Statistics Hub</span>
+        </div>
+        """, unsafe_allow_html=True)
 
         # Units Reference and Verification Expander
         with st.expander("📐 ตารางทบทวนและตรวจสอบหน่วยวัดปิโตรเลียม (Petroleum Units Audit Reference)", expanded=False):
