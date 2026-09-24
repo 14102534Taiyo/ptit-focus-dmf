@@ -191,6 +191,11 @@ THAI_MONTHS = [
     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
 ]
 MONTH_ORDER = {m: i+1 for i, m in enumerate(THAI_MONTHS)}
+DAYS_IN_MONTH = {
+    'มกราคม': 31, 'กุมภาพันธ์': 28, 'มีนาคม': 31, 'เมษายน': 30,
+    'พฤษภาคม': 31, 'มิถุนายน': 30, 'กรกฎาคม': 31, 'สิงหาคม': 31,
+    'กันยายน': 30, 'ตุลาคม': 31, 'พฤศจิกายน': 30, 'ธันวาคม': 31
+}
 
 # ----------------------------------------------------
 # Helper Functions & Crystal Aqua Plotly Theme
@@ -366,7 +371,7 @@ def parse_sales_file(file_input, filename_label):
     ws = wb.active
 
     row2_val = str(ws.cell(2, 1).value or '')
-    month_name, year_val = '', ''
+    month_name, year_val = '', '2569'
     for m in THAI_MONTHS:
         if m in row2_val:
             month_name = m
@@ -375,6 +380,7 @@ def parse_sales_file(file_input, filename_label):
     if ymatch:
         year_val = ymatch.group(1)
 
+    days_cnt = DAYS_IN_MONTH.get(month_name, 30)
     current_product = None
     records = []
 
@@ -396,18 +402,53 @@ def parse_sales_file(file_input, filename_label):
         if 'LPG' in c1:
             prod_type = 'ก๊าซปิโตรเลียมเหลว (LPG)'
 
-        v1 = clean_number(c2)
-        v2 = clean_number(c3) if current_product == 'ก๊าซธรรมชาติ' and 'LPG' not in c1 else None
         val = clean_number(c4)
         royalty = clean_number(c5)
 
-        unit_str = ''
+        mmscf = None
+        mmbtu = None
+        bbl = None
+        kg = None
+        rate_daily_vol = None
+        rate_daily_heat = None
+        rate_daily_bpd = None
+        wellhead_price = 0.0
+        wellhead_unit = ''
+        wellhead_gas_mmscf = None
+        heating_val = None
+
         if prod_type == 'ก๊าซธรรมชาติ':
-            unit_str = 'ล้าน ลบ.ฟุต'
-        elif prod_type in ['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ']:
-            unit_str = 'บาร์เรล'
+            mmscf = clean_number(c2)
+            mmbtu = clean_number(c3)
+            rate_daily_vol = mmscf / days_cnt if days_cnt > 0 else 0.0
+            rate_daily_heat = mmbtu / days_cnt if days_cnt > 0 else 0.0
+            wellhead_price = val / mmbtu if mmbtu > 0 else 0.0
+            wellhead_unit = 'บาท/MMBTU'
+            wellhead_gas_mmscf = val / mmscf if mmscf > 0 else 0.0
+            heating_val = mmbtu / mmscf if mmscf > 0 else 0.0
+            unit_str = 'ล้าน ลบ.ฟุต & ล้านบีทียู'
+            v_main = mmscf
+
         elif prod_type == 'ก๊าซปิโตรเลียมเหลว (LPG)':
+            # LPG รายงานใน c3 หรือ c2 (หน่วย kgs)
+            c3_val = clean_number(c3)
+            c2_val = clean_number(c2)
+            kg = c3_val if c3_val > 0 else c2_val
+            rate_daily_vol = kg / days_cnt if days_cnt > 0 else 0.0
+            wellhead_price = val / kg if kg > 0 else 0.0
+            wellhead_unit = 'บาท/กก.'
             unit_str = 'กิโลกรัม'
+            v_main = kg
+
+        elif prod_type in ['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ']:
+            bbl = clean_number(c2)
+            rate_daily_bpd = bbl / days_cnt if days_cnt > 0 else 0.0
+            wellhead_price = val / bbl if bbl > 0 else 0.0
+            wellhead_unit = 'บาท/บาร์เรล'
+            unit_str = 'บาร์เรล'
+            v_main = bbl
+
+        royalty_pct = (royalty / val * 100) if val > 0 else 0.0
 
         rec = {
             'ปี': year_val,
@@ -416,10 +457,22 @@ def parse_sales_file(file_input, filename_label):
             'ประเภทปิโตรเลียม': prod_type,
             'แหล่ง_ไฟล์ดิบ': c1,
             'หน่วยปริมาณ': unit_str,
-            'ปริมาณการขาย_หน่วยหลัก': v1,
-            'ปริมาณการขาย_MMBTU': v2,
+            'ปริมาณการขาย_หน่วยหลัก': v_main,
+            'ปริมาณการขาย_MMSCF': mmscf,
+            'ปริมาณการขาย_MMBTU': mmbtu,
+            'ปริมาณการขาย_บาร์เรล': bbl,
+            'ปริมาณการขาย_กิโลกรัม': kg,
+            'ปริมาณการขายเฉลี่ย_MMSCFD': rate_daily_vol if prod_type == 'ก๊าซธรรมชาติ' else None,
+            'ปริมาณความร้อนเฉลี่ย_MMBTUD': rate_daily_heat if prod_type == 'ก๊าซธรรมชาติ' else None,
+            'ปริมาณการขายเฉลี่ย_BPD': rate_daily_bpd if prod_type in ['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ'] else None,
+            'ค่าความร้อน_Heating_Value_BTU_per_SCF': heating_val,
             'มูลค่าการขาย_บาท': val,
             'ค่าภาคหลวง_บาท': royalty,
+            'ราคาปากหลุม_Wellhead_Price': wellhead_price,
+            'หน่วยราคาปากหลุม': wellhead_unit,
+            'ราคาปากหลุม_ก๊าซ_บาทต่อMMSCF': wellhead_gas_mmscf,
+            'อัตราค่าภาคหลวงที่แท้จริง_Pct': royalty_pct,
+            'ราคาเฉลี่ยต่อหน่วย_บาท': wellhead_price,
             'ไฟล์ที่มา': filename_label
         }
         records.append(rec)
@@ -745,18 +798,29 @@ def process_sales_dfs(parsed_list, save_to_disk=False):
     df_sales_merged['แอ่งปิโตรเลียม'] = df_sales_merged['แอ่งปิโตรเลียม'].fillna('ไม่ระบุ')
     df_sales_merged['ประเภทสัญญา'] = df_sales_merged['ประเภทสัญญา'].fillna('ไม่ระบุ')
 
-    df_sales_merged['ราคาเฉลี่ยต่อหน่วย_บาท'] = 0.0
-    mask_gas = (df_sales_merged['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ') & (df_sales_merged['ปริมาณการขาย_MMBTU'] > 0)
-    df_sales_merged.loc[mask_gas, 'ราคาเฉลี่ยต่อหน่วย_บาท'] = df_sales_merged.loc[mask_gas, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_gas, 'ปริมาณการขาย_MMBTU']
+    if 'ราคาปากหลุม_Wellhead_Price' not in df_sales_merged.columns:
+        df_sales_merged['ราคาปากหลุม_Wellhead_Price'] = 0.0
+        mask_gas = (df_sales_merged['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ') & (df_sales_merged.get('ปริมาณการขาย_MMBTU', 0) > 0)
+        df_sales_merged.loc[mask_gas, 'ราคาปากหลุม_Wellhead_Price'] = df_sales_merged.loc[mask_gas, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_gas, 'ปริมาณการขาย_MMBTU']
+        mask_oil = (df_sales_merged['ประเภทปิโตรเลียม'].isin(['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ'])) & (df_sales_merged.get('ปริมาณการขาย_บาร์เรล', 0) > 0)
+        df_sales_merged.loc[mask_oil, 'ราคาปากหลุม_Wellhead_Price'] = df_sales_merged.loc[mask_oil, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_oil, 'ปริมาณการขาย_บาร์เรล']
 
-    mask_oil = (df_sales_merged['ประเภทปิโตรเลียม'].isin(['ก๊าซธรรมชาติเหลว', 'น้ำมันดิบ'])) & (df_sales_merged['ปริมาณการขาย_หน่วยหลัก'] > 0)
-    df_sales_merged.loc[mask_oil, 'ราคาเฉลี่ยต่อหน่วย_บาท'] = df_sales_merged.loc[mask_oil, 'มูลค่าการขาย_บาท'] / df_sales_merged.loc[mask_oil, 'ปริมาณการขาย_หน่วยหลัก']
+    df_sales_merged['ราคาเฉลี่ยต่อหน่วย_บาท'] = df_sales_merged.get('ราคาปากหลุม_Wellhead_Price', 0.0)
 
     ordered_sale_cols = [
         'ปี', 'เดือน', 'ลำดับเดือน', 'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ',
         'พื้นที่', 'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา',
-        'ปริมาณการขาย_หน่วยหลัก', 'หน่วยปริมาณ', 'ปริมาณการขาย_MMBTU',
-        'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'ราคาเฉลี่ยต่อหน่วย_บาท',
+        'ปริมาณการขาย_หน่วยหลัก', 'หน่วยปริมาณ',
+        'ปริมาณการขาย_MMSCF', 'ปริมาณการขาย_MMBTU',
+        'ปริมาณการขาย_บาร์เรล', 'ปริมาณการขาย_กิโลกรัม',
+        'ปริมาณการขายเฉลี่ย_MMSCFD', 'ปริมาณความร้อนเฉลี่ย_MMBTUD',
+        'ปริมาณการขายเฉลี่ย_BPD',
+        'ค่าความร้อน_Heating_Value_BTU_per_SCF',
+        'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท',
+        'ราคาปากหลุม_Wellhead_Price', 'หน่วยราคาปากหลุม',
+        'ราคาปากหลุม_ก๊าซ_บาทต่อMMSCF',
+        'อัตราค่าภาคหลวงที่แท้จริง_Pct',
+        'ราคาเฉลี่ยต่อหน่วย_บาท',
         'หมายเหตุ', 'ไฟล์ที่มา'
     ]
     final_sale_cols = [c for c in ordered_sale_cols if c in df_sales_merged.columns]
@@ -1357,6 +1421,24 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
                 df_s_monthly['Royalty_MoM_pct'] = (df_s_monthly['Royalty_MoM_diff'] / df_s_monthly['ค่าภาคหลวง_บาท'].shift(1)) * 100
 
                 latest_s = df_s_monthly.iloc[-1]
+                # KPI Summary Bar for Latest Month (Including Wellhead Prices!)
+                df_latest_month = df_s_filt[df_s_filt['เดือน'] == latest_s['เดือน']]
+
+                gas_lat = df_latest_month[df_latest_month['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ']
+                gas_mmbtu_sum = gas_lat['ปริมาณการขาย_MMBTU'].sum() if 'ปริมาณการขาย_MMBTU' in gas_lat.columns else 0
+                gas_val_sum = gas_lat['มูลค่าการขาย_บาท'].sum()
+                avg_wp_gas = (gas_val_sum / gas_mmbtu_sum) if gas_mmbtu_sum > 0 else 0.0
+
+                oil_lat = df_latest_month[df_latest_month['ประเภทปิโตรเลียม'] == 'น้ำมันดิบ']
+                oil_bbl_sum = oil_lat['ปริมาณการขาย_บาร์เรล'].sum() if 'ปริมาณการขาย_บาร์เรล' in oil_lat.columns else oil_lat['ปริมาณการขาย_หน่วยหลัก'].sum()
+                oil_val_sum = oil_lat['มูลค่าการขาย_บาท'].sum()
+                avg_wp_oil = (oil_val_sum / oil_bbl_sum) if oil_bbl_sum > 0 else 0.0
+
+                cond_lat = df_latest_month[df_latest_month['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติเหลว']
+                cond_bbl_sum = cond_lat['ปริมาณการขาย_บาร์เรล'].sum() if 'ปริมาณการขาย_บาร์เรล' in cond_lat.columns else cond_lat['ปริมาณการขาย_หน่วยหลัก'].sum()
+                cond_val_sum = cond_lat['มูลค่าการขาย_บาท'].sum()
+                avg_wp_cond = (cond_val_sum / cond_bbl_sum) if cond_bbl_sum > 0 else 0.0
+
                 st.markdown(f"##### 📌 สถิติประจำเดือนล่าสุด: **{latest_s['เดือน']}**")
 
                 k_s1, k_s2, k_s3, k_s4 = st.columns(4)
@@ -1375,109 +1457,284 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
                     ytd_val = df_s_monthly['มูลค่าการขาย_บาท'].sum()
                     st.metric("📅 มูลค่าขายสะสม (YTD)", f"{ytd_val/1e9:,.2f} พันล้านบาท")
 
-                st.markdown("---")
+                # Wellhead Price KPI Strip (Bento Style)
+                st.markdown(f"""
+                <div style="background: rgba(240, 249, 255, 0.7); border: 1px solid rgba(186, 230, 253, 0.8); border-radius: 12px; padding: 10px 16px; margin: 10px 0 16px 0; display: flex; align-items: center; justify-content: space-around; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #0284C7;">💨 ราคาปากหลุม ก๊าซธรรมชาติ ({latest_s['เดือน']})</span><br/>
+                        <span style="font-size: 17px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace;">{avg_wp_gas:,.2f}</span> <span style="font-size: 12px; color: #475569;">บาท/MMBTU</span>
+                    </div>
+                    <div style="border-left: 1px solid rgba(186, 230, 253, 0.8); padding-left: 16px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #EA580C;">🛢️ ราคาปากหลุม น้ำมันดิบ ({latest_s['เดือน']})</span><br/>
+                        <span style="font-size: 17px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace;">{avg_wp_oil:,.2f}</span> <span style="font-size: 12px; color: #475569;">บาท/บาร์เรล</span>
+                    </div>
+                    <div style="border-left: 1px solid rgba(186, 230, 253, 0.8); padding-left: 16px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #7C3AED;">💧 ราคาปากหลุม คอนเดนเสท ({latest_s['เดือน']})</span><br/>
+                        <span style="font-size: 17px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace;">{avg_wp_cond:,.2f}</span> <span style="font-size: 12px; color: #475569;">บาท/บาร์เรล</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-                ch_s1, ch_s2 = st.columns(2)
-                with ch_s1:
-                    st.markdown("#### 1. มูลค่าการจำหน่ายรวมรายเดือน (บาท)")
-                    df_prod_m = df_s_filt.groupby(['เดือน', 'ลำดับเดือน', 'ประเภทปิโตรเลียม'], as_index=False)['มูลค่าการขาย_บาท'].sum().sort_values('ลำดับเดือน')
-                    fig_s_val = px.bar(
-                        df_prod_m,
-                        x='เดือน',
-                        y='มูลค่าการขาย_บาท',
-                        color='ประเภทปิโตรเลียม',
-                        barmode='stack',
-                        title="มูลค่าการจำหน่ายปิโตรเลียมรายเดือนแยกตามประเภท (บาท)",
-                        labels={'มูลค่าการขาย_บาท': 'มูลค่า (บาท)', 'เดือน': 'เดือน'},
-                        color_discrete_map={
-                            'ก๊าซธรรมชาติ': '#0284C7',
-                            'ก๊าซธรรมชาติเหลว': '#7C3AED',
-                            'น้ำมันดิบ': '#EA580C',
-                            'ก๊าซปิโตรเลียมเหลว (LPG)': '#0096C7'
-                        }
+                subtab_s1, subtab_s2, subtab_s3, subtab_s4 = st.tabs([
+                    "💰 1. มูลค่าและค่าภาคหลวง (Revenue & Royalties)",
+                    "🎯 2. ราคา ณ ปากหลุม (Wellhead Price Telemetry)",
+                    "⚖️ 3. ปริมาณการขาย 2 รูปแบบ & ค่าความร้อน (Sales Volume & Energy Units)",
+                    "🏢 4. สัดส่วนตลาดตามผู้ดำเนินการและแอ่ง (Market Share)"
+                ])
+
+                # ----------------------------------------------------
+                # SUBTAB 1: REVENUE & ROYALTIES
+                # ----------------------------------------------------
+                with subtab_s1:
+                    ch_s1, ch_s2 = st.columns(2)
+                    with ch_s1:
+                        st.markdown("#### 1.1 มูลค่าการจำหน่ายรวมรายเดือน (บาท)")
+                        df_prod_m = df_s_filt.groupby(['เดือน', 'ลำดับเดือน', 'ประเภทปิโตรเลียม'], as_index=False)['มูลค่าการขาย_บาท'].sum().sort_values('ลำดับเดือน')
+                        fig_s_val = px.bar(
+                            df_prod_m,
+                            x='เดือน',
+                            y='มูลค่าการขาย_บาท',
+                            color='ประเภทปิโตรเลียม',
+                            barmode='stack',
+                            title="มูลค่าการจำหน่ายปิโตรเลียมรายเดือนแยกตามประเภท (บาท)",
+                            labels={'มูลค่าการขาย_บาท': 'มูลค่า (บาท)', 'เดือน': 'เดือน'},
+                            color_discrete_map={
+                                'ก๊าซธรรมชาติ': '#0284C7',
+                                'ก๊าซธรรมชาติเหลว': '#7C3AED',
+                                'น้ำมันดิบ': '#EA580C',
+                                'ก๊าซปิโตรเลียมเหลว (LPG)': '#0096C7'
+                            }
+                        )
+                        fig_s_val.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        apply_crystal_aqua_theme(fig_s_val)
+                        st.plotly_chart(fig_s_val, use_container_width=True)
+
+                    with ch_s2:
+                        st.markdown("#### 1.2 ค่าภาคหลวงที่จัดเก็บได้รายเดือน (บาท)")
+                        fig_s_roy = px.bar(
+                            df_s_monthly,
+                            x='เดือน',
+                            y='ค่าภาคหลวง_บาท',
+                            text_auto='.2s',
+                            title="ค่าภาคหลวงปิโตรเลียมรายเดือน (บาท)",
+                            labels={'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)', 'เดือน': 'เดือน'},
+                            color_discrete_sequence=['#F77F00']
+                        )
+                        fig_s_roy.update_traces(textposition='outside')
+                        apply_crystal_aqua_theme(fig_s_roy)
+                        st.plotly_chart(fig_s_roy, use_container_width=True)
+
+                    st.markdown("#### 1.3 ตารางสรุปตัวเลขสถิติรายเดือน")
+                    df_s_tbl = df_s_monthly[['เดือน', 'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'Royalty_pct', 'Value_MoM_diff', 'Value_MoM_pct']].copy()
+                    df_s_tbl.rename(columns={
+                        'มูลค่าการขาย_บาท': 'มูลค่าการขาย (บาท)',
+                        'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)',
+                        'Royalty_pct': 'สัดส่วนค่าภาคหลวง (%)',
+                        'Value_MoM_diff': 'เปลี่ยนแปลง MoM (บาท)',
+                        'Value_MoM_pct': 'MoM (%)'
+                    }, inplace=True)
+                    st.dataframe(
+                        df_s_tbl.style.format({
+                            'มูลค่าการขาย (บาท)': '{:,.0f}',
+                            'ค่าภาคหลวง (บาท)': '{:,.0f}',
+                            'สัดส่วนค่าภาคหลวง (%)': '{:.2f}%',
+                            'เปลี่ยนแปลง MoM (บาท)': lambda x: f"{x:+,.0f}" if pd.notna(x) else "-",
+                            'MoM (%)': lambda x: f"{x:+.2f}%" if pd.notna(x) else "-"
+                        }),
+                        use_container_width=True
                     )
-                    fig_s_val.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    apply_crystal_aqua_theme(fig_s_val)
-                    st.plotly_chart(fig_s_val, use_container_width=True)
 
-                with ch_s2:
-                    st.markdown("#### 2. ค่าภาคหลวงที่จัดเก็บได้รายเดือน (บาท)")
-                    fig_s_roy = px.bar(
-                        df_s_monthly,
-                        x='เดือน',
-                        y='ค่าภาคหลวง_บาท',
-                        text_auto='.2s',
-                        title="ค่าภาคหลวงปิโตรเลียมรายเดือน (บาท)",
-                        labels={'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)', 'เดือน': 'เดือน'},
-                        color_discrete_sequence=['#F77F00']
-                    )
-                    fig_s_roy.update_traces(textposition='outside')
-                    apply_crystal_aqua_theme(fig_s_roy)
-                    st.plotly_chart(fig_s_roy, use_container_width=True)
+                # ----------------------------------------------------
+                # SUBTAB 2: WELLHEAD PRICE TELEMETRY
+                # ----------------------------------------------------
+                with subtab_s2:
+                    st.markdown("#### 🎯 2. ข้อมูลและการวิเคราะห์ราคา ณ ปากหลุม (Wellhead Price)")
+                    st.caption("Wellhead Price คือราคาขายปิโตรเลียม ณ จุดส่งมอบหน้าปากหลุมผลิต ใช้เป็นเกณฑ์ในการคำนวณมูลค่าและจัดเก็บค่าภาคหลวงปิโตรเลียมของประเทศ")
 
-                ch_s3, ch_s4 = st.columns(2)
-                with ch_s3:
-                    st.markdown("#### 3. สัดส่วนมูลค่าการจำหน่ายตาม Operator")
-                    df_s_op = df_s_filt.groupby('ผู้ดำเนินการ', as_index=False)['มูลค่าการขาย_บาท'].sum()
-                    fig_s_op = px.pie(
-                        df_s_op,
-                        names='ผู้ดำเนินการ',
-                        values='มูลค่าการขาย_บาท',
-                        hole=0.45,
-                        title="Market Share มูลค่ายอดขายตาม Operator รวม",
-                        color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
-                    )
-                    apply_crystal_aqua_theme(fig_s_op)
-                    st.plotly_chart(fig_s_op, use_container_width=True)
+                    wp_col1, wp_col2 = st.columns(2)
+                    with wp_col1:
+                        # Monthly trend for Natural Gas (THB/MMBTU)
+                        df_gas_trend = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
+                            lambda g: pd.Series({
+                                'ราคาปากหลุมก๊าซฯ (บาท/MMBTU)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_MMBTU'].sum() if g['ปริมาณการขาย_MMBTU'].sum() > 0 else 0
+                            }), include_groups=False
+                        ).reset_index().sort_values('ลำดับเดือน')
 
-                with ch_s4:
-                    st.markdown("#### 4. ราคาเฉลี่ยต่อหน่วยโดยประมาณ (Implied Unit Price)")
-                    df_gas_p = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
-                        lambda g: pd.Series({'ก๊าซธรรมชาติ (บาท/MMBTU)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_MMBTU'].sum() if g['ปริมาณการขาย_MMBTU'].sum() > 0 else 0}),
-                        include_groups=False
-                    ).reset_index().sort_values('ลำดับเดือน')
+                        fig_wp_gas = px.line(
+                            df_gas_trend,
+                            x='เดือน',
+                            y='ราคาปากหลุมก๊าซฯ (บาท/MMBTU)',
+                            markers=True,
+                            title="💨 แนวโน้มราคาปากหลุม ก๊าซธรรมชาติ (บาท/MMBTU)",
+                            color_discrete_sequence=['#0284C7']
+                        )
+                        fig_wp_gas.update_traces(text=df_gas_trend['ราคาปากหลุมก๊าซฯ (บาท/MMBTU)'].apply(lambda x: f"{x:.1f}"), textposition="top center")
+                        apply_crystal_aqua_theme(fig_wp_gas)
+                        st.plotly_chart(fig_wp_gas, use_container_width=True)
 
-                    df_oil_p = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'น้ำมันดิบ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
-                        lambda g: pd.Series({'น้ำมันดิบ (บาท/บาร์เรล)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_หน่วยหลัก'].sum() if g['ปริมาณการขาย_หน่วยหลัก'].sum() > 0 else 0}),
-                        include_groups=False
-                    ).reset_index().sort_values('ลำดับเดือน')
+                    with wp_col2:
+                        # Monthly trend for Liquids (THB/BBL)
+                        df_oil_trend = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'น้ำมันดิบ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
+                            lambda g: pd.Series({
+                                'น้ำมันดิบ (บาท/บาร์เรล)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_บาร์เรล'].sum() if g['ปริมาณการขาย_บาร์เรล'].sum() > 0 else (g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_หน่วยหลัก'].sum() if g['ปริมาณการขาย_หน่วยหลัก'].sum() > 0 else 0)
+                            }), include_groups=False
+                        ).reset_index().sort_values('ลำดับเดือน')
 
-                    df_price_m = pd.merge(df_gas_p[['เดือน', 'ลำดับเดือน', 'ก๊าซธรรมชาติ (บาท/MMBTU)']], df_oil_p[['เดือน', 'น้ำมันดิบ (บาท/บาร์เรล)']], on='เดือน', how='outer').sort_values('ลำดับเดือน')
+                        df_cond_trend = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติเหลว'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).apply(
+                            lambda g: pd.Series({
+                                'คอนเดนเสท (บาท/บาร์เรล)': g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_บาร์เรล'].sum() if g['ปริมาณการขาย_บาร์เรล'].sum() > 0 else (g['มูลค่าการขาย_บาท'].sum() / g['ปริมาณการขาย_หน่วยหลัก'].sum() if g['ปริมาณการขาย_หน่วยหลัก'].sum() > 0 else 0)
+                            }), include_groups=False
+                        ).reset_index().sort_values('ลำดับเดือน')
 
-                    fig_s_price = px.line(
-                        df_price_m,
-                        x='เดือน',
-                        y=['ก๊าซธรรมชาติ (บาท/MMBTU)', 'น้ำมันดิบ (บาท/บาร์เรล)'],
-                        markers=True,
-                        title="แนวโน้มราคาเฉลี่ยต่อหน่วยโดยประมาณรายเดือน",
-                        color_discrete_map={
-                            'ก๊าซธรรมชาติ (บาท/MMBTU)': '#0284C7',
-                            'น้ำมันดิบ (บาท/บาร์เรล)': '#EA580C'
-                        }
-                    )
-                    fig_s_price.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    apply_crystal_aqua_theme(fig_s_price)
-                    st.plotly_chart(fig_s_price, use_container_width=True)
+                        df_liq_trend = pd.merge(df_oil_trend[['เดือน', 'ลำดับเดือน', 'น้ำมันดิบ (บาท/บาร์เรล)']], df_cond_trend[['เดือน', 'คอนเดนเสท (บาท/บาร์เรล)']], on='เดือน', how='outer').sort_values('ลำดับเดือน')
 
-                st.markdown("#### 5. ตารางสรุปตัวเลขสถิติรายเดือน")
-                df_s_tbl = df_s_monthly[['เดือน', 'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'Royalty_pct', 'Value_MoM_diff', 'Value_MoM_pct']].copy()
-                df_s_tbl.rename(columns={
-                    'มูลค่าการขาย_บาท': 'มูลค่าการขาย (บาท)',
-                    'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)',
-                    'Royalty_pct': 'สัดส่วนค่าภาคหลวง (%)',
-                    'Value_MoM_diff': 'เปลี่ยนแปลง MoM (บาท)',
-                    'Value_MoM_pct': 'MoM (%)'
-                }, inplace=True)
-                st.dataframe(
-                    df_s_tbl.style.format({
-                        'มูลค่าการขาย (บาท)': '{:,.0f}',
-                        'ค่าภาคหลวง (บาท)': '{:,.0f}',
-                        'สัดส่วนค่าภาคหลวง (%)': '{:.2f}%',
-                        'เปลี่ยนแปลง MoM (บาท)': lambda x: f"{x:+,.0f}" if pd.notna(x) else "-",
-                        'MoM (%)': lambda x: f"{x:+.2f}%" if pd.notna(x) else "-"
-                    }),
-                    use_container_width=True
-                )
+                        fig_wp_liq = px.line(
+                            df_liq_trend,
+                            x='เดือน',
+                            y=['น้ำมันดิบ (บาท/บาร์เรล)', 'คอนเดนเสท (บาท/บาร์เรล)'],
+                            markers=True,
+                            title="🛢️ แนวโน้มราคาปากหลุม น้ำมันดิบและคอนเดนเสท (บาท/บาร์เรล)",
+                            color_discrete_map={
+                                'น้ำมันดิบ (บาท/บาร์เรล)': '#EA580C',
+                                'คอนเดนเสท (บาท/บาร์เรล)': '#7C3AED'
+                            }
+                        )
+                        fig_wp_liq.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        apply_crystal_aqua_theme(fig_wp_liq)
+                        st.plotly_chart(fig_wp_liq, use_container_width=True)
+
+                    st.markdown("---")
+                    st.markdown("##### 🔍 เปรียบเทียบราคา ณ ปากหลุม แยกตามรายแหล่ง (Field Benchmark)")
+                    c_f_sel1, c_f_sel2 = st.columns(2)
+                    with c_f_sel1:
+                        sel_wp_prod = st.selectbox("เลือกประเภทปิโตรเลียม:", ['ก๊าซธรรมชาติ', 'น้ำมันดิบ', 'ก๊าซธรรมชาติเหลว'], key="sel_wp_prod")
+                    with c_f_sel2:
+                        sel_wp_month = st.selectbox("เลือกเดือนที่ต้องการเปรียบเทียบ:", s_months, index=len(s_months)-1, key="sel_wp_month")
+
+                    df_wp_bench = df_s_filt[(df_s_filt['ประเภทปิโตรเลียม'] == sel_wp_prod) & (df_s_filt['เดือน'] == sel_wp_month) & (df_s_filt['ราคาปากหลุม_Wellhead_Price'] > 0)].sort_values('ราคาปากหลุม_Wellhead_Price', ascending=True)
+
+                    if not df_wp_bench.empty:
+                        u_label = df_wp_bench['หน่วยราคาปากหลุม'].iloc[0] if 'หน่วยราคาปากหลุม' in df_wp_bench.columns else 'บาท/หน่วย'
+                        fig_bench = px.bar(
+                            df_wp_bench,
+                            x='ราคาปากหลุม_Wellhead_Price',
+                            y='แหล่ง_ไฟล์ดิบ',
+                            orientation='h',
+                            text_auto='.1f',
+                            title=f"ราคา ณ ปากหลุม รายแหล่ง: {sel_wp_prod} ({sel_wp_month}) [{u_label}]",
+                            labels={'ราคาปากหลุม_Wellhead_Price': f'ราคาปากหลุม ({u_label})', 'แหล่ง_ไฟล์ดิบ': 'ชื่อแหล่ง'},
+                            color='ราคาปากหลุม_Wellhead_Price',
+                            color_continuous_scale=['#BAE6FD', '#0284C7', '#023E8A'] if sel_wp_prod == 'ก๊าซธรรมชาติ' else ['#FED7AA', '#EA580C', '#9A3412']
+                        )
+                        fig_bench.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'})
+                        apply_crystal_aqua_theme(fig_bench)
+                        st.plotly_chart(fig_bench, use_container_width=True)
+                    else:
+                        st.info(f"ไม่พบข้อมูลราคาปากหลุมสำหรับ {sel_wp_prod} ในเดือน {sel_wp_month}")
+
+                # ----------------------------------------------------
+                # SUBTAB 3: VOLUMES & HEATING VALUE
+                # ----------------------------------------------------
+                with subtab_s3:
+                    st.markdown("#### ⚖️ 3. ปริมาณการจำหน่ายก๊าซธรรมชาติ 2 รูปแบบ และการวิเคราะห์ค่าความร้อน (Heating Value)")
+                    st.markdown("""
+                    <div style="background: rgba(240, 253, 250, 0.8); border: 1px solid rgba(153, 246, 228, 0.8); border-radius: 10px; padding: 10px 16px; margin-bottom: 14px;">
+                        <span style="color: #0F766E; font-weight: 700; font-size: 13px;">💡 การจัดรูปแบบหน่วยของก๊าซธรรมชาติในสัญญาซื้อขาย (Gas Contracts):</span><br/>
+                        <span style="font-size: 12px; color: #334155; line-height: 1.5;">
+                        • <b>ปริมาณเชิงปริมาตร (Volume):</b> วัดเป็น <b>ล้านลูกบาศก์ฟุต (MMSCF)</b> หรือเฉลี่ยรายวันคือ <b>MMSCFD</b> ซึ่งเป็นปริมาตรทางกายภาพ<br/>
+                        • <b>ปริมาณเชิงพลังงาน (Energy Content):</b> วัดเป็น <b>ล้านบีทียู (MMBTU)</b> ซึ่งเป็นตัวเลขที่ใช้ในการคิดเงินตามสัญญา (Billing)<br/>
+                        • <b>ค่าความร้อน (Heating Value):</b> อัตราส่วน <b>BTU/scf (หรือ MMBTU/MMSCF)</b> สะท้อนคุณภาพของก๊าซธรรมชาติในแต่ละแหล่ง
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    c_v1, c_v2 = st.columns(2)
+                    with c_v1:
+                        df_gas_vol = df_s_filt[df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ'].groupby(['เดือน', 'ลำดับเดือน'], as_index=False).agg({
+                            'ปริมาณการขาย_MMSCF': 'sum',
+                            'ปริมาณการขาย_MMBTU': 'sum'
+                        }).sort_values('ลำดับเดือน')
+
+                        fig_g_vol = px.bar(
+                            df_gas_vol,
+                            x='เดือน',
+                            y='ปริมาณการขาย_MMSCF',
+                            text_auto=',.0f',
+                            title="💨 ปริมาณการขายก๊าซธรรมชาติเชิงปริมาตรรายเดือน (ล้าน ลบ.ฟุต - MMSCF)",
+                            labels={'ปริมาณการขาย_MMSCF': 'ปริมาณ (MMSCF)', 'เดือน': 'เดือน'},
+                            color_discrete_sequence=['#0284C7']
+                        )
+                        fig_g_vol.update_traces(textposition='outside')
+                        apply_crystal_aqua_theme(fig_g_vol)
+                        st.plotly_chart(fig_g_vol, use_container_width=True)
+
+                    with c_v2:
+                        fig_g_heat = px.bar(
+                            df_gas_vol,
+                            x='เดือน',
+                            y='ปริมาณการขาย_MMBTU',
+                            text_auto='.2s',
+                            title="🔥 ปริมาณความร้อนก๊าซธรรมชาติรายเดือน (ล้านบีทียู - MMBTU)",
+                            labels={'ปริมาณการขาย_MMBTU': 'ความร้อน (MMBTU)', 'เดือน': 'เดือน'},
+                            color_discrete_sequence=['#F59E0B']
+                        )
+                        fig_g_heat.update_traces(textposition='outside')
+                        apply_crystal_aqua_theme(fig_g_heat)
+                        st.plotly_chart(fig_g_heat, use_container_width=True)
+
+                    # Heating value per field
+                    st.markdown("##### 🔬 ค่าความร้อนก๊าซธรรมชาติเฉลี่ยแยกตามรายแหล่ง (Heating Value: BTU/scf)")
+                    if 'ค่าความร้อน_Heating_Value_BTU_per_SCF' in df_s_filt.columns:
+                        df_gas_hv = df_s_filt[(df_s_filt['ประเภทปิโตรเลียม'] == 'ก๊าซธรรมชาติ') & (df_s_filt['ค่าความร้อน_Heating_Value_BTU_per_SCF'] > 0)].groupby('แหล่ง_ไฟล์ดิบ', as_index=False)['ค่าความร้อน_Heating_Value_BTU_per_SCF'].mean().sort_values('ค่าความร้อน_Heating_Value_BTU_per_SCF', ascending=True)
+
+                        if not df_gas_hv.empty:
+                            fig_hv = px.bar(
+                                df_gas_hv,
+                                x='ค่าความร้อน_Heating_Value_BTU_per_SCF',
+                                y='แหล่ง_ไฟล์ดิบ',
+                                orientation='h',
+                                text_auto=',.1f',
+                                title="ค่าความร้อนของก๊าซธรรมชาติเฉลี่ยรายแหล่ง (BTU/scf) - ค่าเฉลี่ยมาตรฐานอ่าวไทย ~950-1,050",
+                                labels={'ค่าความร้อน_Heating_Value_BTU_per_SCF': 'Heating Value (BTU/scf)', 'แหล่ง_ไฟล์ดิบ': 'ชื่อแหล่ง'},
+                                color='ค่าความร้อน_Heating_Value_BTU_per_SCF',
+                                color_continuous_scale=['#CCFBF1', '#0D9488', '#115E59']
+                            )
+                            fig_hv.update_layout(coloraxis_showscale=False, yaxis={'categoryorder':'total ascending'})
+                            apply_crystal_aqua_theme(fig_hv)
+                            st.plotly_chart(fig_hv, use_container_width=True)
+
+                # ----------------------------------------------------
+                # SUBTAB 4: MARKET SHARE
+                # ----------------------------------------------------
+                with subtab_s4:
+                    ch_s3, ch_s4 = st.columns(2)
+                    with ch_s3:
+                        st.markdown("#### 4.1 สัดส่วนมูลค่าการจำหน่ายตาม Operator")
+                        df_s_op = df_s_filt.groupby('ผู้ดำเนินการ', as_index=False)['มูลค่าการขาย_บาท'].sum()
+                        fig_s_op = px.pie(
+                            df_s_op,
+                            names='ผู้ดำเนินการ',
+                            values='มูลค่าการขาย_บาท',
+                            hole=0.45,
+                            title="Market Share มูลค่ายอดขายตาม Operator รวม",
+                            color_discrete_sequence=['#0284C7', '#023E8A', '#EA580C', '#7C3AED', '#0096C7', '#F77F00', '#10B981', '#64748B']
+                        )
+                        apply_crystal_aqua_theme(fig_s_op)
+                        st.plotly_chart(fig_s_op, use_container_width=True)
+
+                    with ch_s4:
+                        st.markdown("#### 4.2 สัดส่วนมูลค่าตามแอ่งปิโตรเลียม (Basin)")
+                        df_s_basin = df_s_filt.groupby('แอ่งปิโตรเลียม', as_index=False)['มูลค่าการขาย_บาท'].sum()
+                        fig_s_basin = px.pie(
+                            df_s_basin,
+                            names='แอ่งปิโตรเลียม',
+                            values='มูลค่าการขาย_บาท',
+                            hole=0.45,
+                            title="สัดส่วนมูลค่ายอดขายตามแอ่งปิโตรเลียม (Basin)",
+                            color_discrete_sequence=['#023E8A', '#0284C7', '#48CAE4', '#90E0EF']
+                        )
+                        apply_crystal_aqua_theme(fig_s_basin)
+                        st.plotly_chart(fig_s_basin, use_container_width=True)
         else:
             if st.session_state.get('user_role', 'viewer') == 'admin':
                 st.info("💡 ยังไม่มีข้อมูลยอดขายในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync ยอดขาย' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
@@ -1488,7 +1745,8 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
     # SALES TAB 4: SUMMARY REPORT
     # ====================================================
     with tab_s_report:
-        st.subheader("📑 รายงานสรุปยอดจำหน่ายและค่าภาคหลวงรายเดือน")
+        st.subheader("📑 รายงานสรุปยอดจำหน่ายและค่าภาคหลวงรายเดือน (Fiscal Report)")
+        st.caption("รายงานจำแนกประเภทปิโตรเลียม แหล่งผลิต ปริมาณการจำหน่ายในหน่วยเฉพาะ มูลค่า ค่าภาคหลวง และราคา ณ ปากหลุม (Wellhead Price)")
 
         if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
             df_s_rep = st.session_state['df_sale_flat'].copy()
@@ -1502,18 +1760,39 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
             st.info(f"📊 สรุปยอดเดือน **{sel_s_month}**: มูลค่าการขายรวม **{tot_val:,.2f} บาท** | ค่าภาคหลวงรวม **{tot_roy:,.2f} บาท**")
 
             report_cols = [
-                'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ', 'ผู้ดำเนินการ', 'พื้นที่', 'แอ่งปิโตรเลียม',
-                'ปริมาณการขาย_หน่วยหลัก', 'หน่วยปริมาณ', 'ปริมาณการขาย_MMBTU',
-                'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท', 'หมายเหตุ'
+                'ประเภทปิโตรเลียม', 'แหล่ง_ไฟล์ดิบ', 'ผู้ดำเนินการ', 'พื้นที่',
+                'ปริมาณการขาย_MMSCF', 'ปริมาณการขาย_MMBTU',
+                'ปริมาณการขาย_บาร์เรล', 'ปริมาณการขาย_กิโลกรัม',
+                'มูลค่าการขาย_บาท', 'ค่าภาคหลวง_บาท',
+                'ราคาปากหลุม_Wellhead_Price', 'หน่วยราคาปากหลุม',
+                'ค่าความร้อน_Heating_Value_BTU_per_SCF', 'อัตราค่าภาคหลวงที่แท้จริง_Pct'
             ]
             df_rep_show = df_s_month_data[[c for c in report_cols if c in df_s_month_data.columns]].copy()
+            rename_rep_map = {
+                'ปริมาณการขาย_MMSCF': 'ปริมาณก๊าซ (MMSCF)',
+                'ปริมาณการขาย_MMBTU': 'ปริมาณความร้อน (MMBTU)',
+                'ปริมาณการขาย_บาร์เรล': 'ปริมาณ (บาร์เรล)',
+                'ปริมาณการขาย_กิโลกรัม': 'ปริมาณ (กก.)',
+                'มูลค่าการขาย_บาท': 'มูลค่าการขาย (บาท)',
+                'ค่าภาคหลวง_บาท': 'ค่าภาคหลวง (บาท)',
+                'ราคาปากหลุม_Wellhead_Price': 'ราคาปากหลุม (Wellhead Price)',
+                'หน่วยราคาปากหลุม': 'หน่วยราคา',
+                'ค่าความร้อน_Heating_Value_BTU_per_SCF': 'Heating Value (BTU/scf)',
+                'อัตราค่าภาคหลวงที่แท้จริง_Pct': 'Royalty (%)'
+            }
+            df_rep_show.rename(columns=rename_rep_map, inplace=True)
 
             st.dataframe(
                 df_rep_show.style.format({
-                    'ปริมาณการขาย_หน่วยหลัก': '{:,.2f}',
-                    'ปริมาณการขาย_MMBTU': lambda x: f"{x:,.2f}" if pd.notna(x) else "-",
-                    'มูลค่าการขาย_บาท': '{:,.2f}',
-                    'ค่าภาคหลวง_บาท': '{:,.2f}'
+                    'ปริมาณก๊าซ (MMSCF)': lambda x: f"{x:,.2f}" if pd.notna(x) and x > 0 else "-",
+                    'ปริมาณความร้อน (MMBTU)': lambda x: f"{x:,.0f}" if pd.notna(x) and x > 0 else "-",
+                    'ปริมาณ (บาร์เรล)': lambda x: f"{x:,.0f}" if pd.notna(x) and x > 0 else "-",
+                    'ปริมาณ (กก.)': lambda x: f"{x:,.0f}" if pd.notna(x) and x > 0 else "-",
+                    'มูลค่าการขาย (บาท)': '{:,.2f}',
+                    'ค่าภาคหลวง (บาท)': '{:,.2f}',
+                    'ราคาปากหลุม (Wellhead Price)': lambda x: f"{x:,.2f}" if pd.notna(x) and x > 0 else "-",
+                    'Heating Value (BTU/scf)': lambda x: f"{x:,.1f}" if pd.notna(x) and x > 0 else "-",
+                    'Royalty (%)': lambda x: f"{x:.2f}%" if pd.notna(x) and x > 0 else "-"
                 }),
                 use_container_width=True,
                 height=500
