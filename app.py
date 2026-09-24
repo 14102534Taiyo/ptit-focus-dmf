@@ -275,6 +275,14 @@ def save_sale_master_mapping(df):
 # ----------------------------------------------------
 FANG_MASTER_FILE = os.path.join(BASE_DIR, "fang_production_master.json")
 
+def save_fang_master(data):
+    """บันทึกข้อมูลค่าน้ำมันดิบแหล่งฝางลง JSON"""
+    try:
+        with open(FANG_MASTER_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึกข้อมูลแหล่งฝาง: {e}")
+
 def load_fang_master():
     """โหลดข้อมูลค่าน้ำมันดิบแหล่งฝาง (Fang - DEDP) รายเดือนจาก JSON หากไม่มีให้สร้างค่าเริ่มต้น"""
     default_data = {
@@ -292,14 +300,6 @@ def load_fang_master():
             pass
     save_fang_master(default_data)
     return default_data
-
-def save_fang_master(data):
-    """บันทึกข้อมูลค่าน้ำมันดิบแหล่งฝางลง JSON"""
-    try:
-        with open(FANG_MASTER_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึกข้อมูลแหล่งฝาง: {e}")
 
 def get_fang_value(year_str, month_str):
     """ดึงค่าน้ำมันดิบแหล่งฝางสำหรับปีและเดือนที่กำหนด"""
@@ -1936,8 +1936,8 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
                 )
 
             with col_sx2:
-                num_s_months = len(df_sale_flat['เดือน'].dropna().unique()) if 'df_sale_flat' in st.session_state else 1
-                total_s_rows = len(st.session_state['df_sale_flat']) if 'df_sale_flat' in st.session_state else len(df_rep_show)
+                num_s_months = len(df_s_rep['เดือน'].dropna().unique())
+                total_s_rows = len(df_s_rep)
                 st.markdown(f"""
                 <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
@@ -1957,10 +1957,7 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
                 """, unsafe_allow_html=True)
                 buf_s_all = io.BytesIO()
                 with pd.ExcelWriter(buf_s_all, engine='openpyxl') as w_all:
-                    if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
-                        st.session_state['df_sale_flat'].to_excel(w_all, sheet_name='Sale_Flat_Table', index=False)
-                    else:
-                        df_rep_show.to_excel(w_all, sheet_name='Sale_Flat_Table', index=False)
+                    df_s_rep.to_excel(w_all, sheet_name='Sale_Flat_Table', index=False)
                 buf_s_all.seek(0)
                 st.download_button(
                     label=f"📊 ดาวน์โหลดฐานข้อมูล Flat Table ยอดขายทั้งปี (.xlsx)",
