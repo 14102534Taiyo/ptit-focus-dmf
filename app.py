@@ -274,17 +274,30 @@ def save_sale_master_mapping(df):
 # DEDP Fang Crude Oil Master Storage & Functions
 # ----------------------------------------------------
 FANG_MASTER_FILE = os.path.join(BASE_DIR, "fang_production_master.json")
+FANG_EXCEL_FILE = os.path.join(BASE_DIR, "fang_production_master.xlsx")
 
 def save_fang_master(data):
-    """บันทึกข้อมูลค่าน้ำมันดิบแหล่งฝางลง JSON"""
+    """บันทึกข้อมูลค่าน้ำมันดิบแหล่งฝางลงทั้ง JSON และ Excel (fang_production_master.xlsx) ในโฟลเดอร์เดียวกัน"""
     try:
         with open(FANG_MASTER_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึกข้อมูลแหล่งฝาง: {e}")
+        pass
+
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Fang_Production"
+        ws.append(["ปี", "ลำดับเดือน", "เดือน", "ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)"])
+        for y_str, m_dict in data.items():
+            for m_name in THAI_MONTHS:
+                ws.append([str(y_str), MONTH_ORDER.get(m_name, 99), m_name, float(m_dict.get(m_name, 0.0))])
+        wb.save(FANG_EXCEL_FILE)
+    except Exception as e:
+        pass
 
 def load_fang_master():
-    """โหลดข้อมูลค่าน้ำมันดิบแหล่งฝาง (Fang - DEDP) รายเดือนจาก JSON หากไม่มีให้สร้างค่าเริ่มต้น"""
+    """โหลดข้อมูลค่าน้ำมันดิบแหล่งฝางจาก Excel หรือ JSON ในโฟลเดอร์ หากไม่มีให้สร้างค่าเริ่มต้น"""
     default_data = {
         "2569": {
             "มกราคม": 0.0, "กุมภาพันธ์": 0.0, "มีนาคม": 0.0, "เมษายน": 0.0,
@@ -292,12 +305,43 @@ def load_fang_master():
             "กันยายน": 0.0, "ตุลาคม": 0.0, "พฤศจิกายน": 0.0, "ธันวาคม": 0.0
         }
     }
+    # 1. ลองโหลดจาก Excel ก่อน
+    if os.path.exists(FANG_EXCEL_FILE):
+        try:
+            wb = openpyxl.load_workbook(FANG_EXCEL_FILE, data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            if len(rows) > 1:
+                res = {}
+                hdr = [str(c or '').strip() for c in rows[0]]
+                idx_y = hdr.index("ปี") if "ปี" in hdr else 0
+                idx_m = hdr.index("เดือน") if "เดือน" in hdr else 2
+                idx_val = len(hdr) - 1
+                for i, h in enumerate(hdr):
+                    if "ค่าน้ำมันดิบ" in h or "BPD" in h:
+                        idx_val = i
+                        break
+                for r in rows[1:]:
+                    if r[idx_y] is not None and r[idx_m] is not None:
+                        y = str(r[idx_y]).strip()
+                        m = str(r[idx_m]).strip()
+                        v = float(r[idx_val]) if r[idx_val] is not None and str(r[idx_val]).replace('.', '', 1).isdigit() else 0.0
+                        if y not in res:
+                            res[y] = {}
+                        res[y][m] = v
+                if res:
+                    return res
+        except Exception:
+            pass
+
+    # 2. ลองโหลดจาก JSON
     if os.path.exists(FANG_MASTER_FILE):
         try:
             with open(FANG_MASTER_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
+
     save_fang_master(default_data)
     return default_data
 
@@ -2763,7 +2807,7 @@ def render_production_master():
             key="fang_data_editor"
         )
 
-        col_f_btn, col_f_dl, col_f_info = st.columns([1.5, 1.5, 2])
+        col_f_btn, col_f_dl_xl, col_f_dl_js = st.columns([1.5, 1.4, 1.4])
         with col_f_btn:
             if st.button("💾 บันทึกตารางค่าน้ำมันดิบแหล่งฝาง", type="primary", use_container_width=True, key="btn_save_fang_table"):
                 updated_dict = {}
@@ -2780,13 +2824,32 @@ def render_production_master():
                                 st.session_state['df_flat_long'].to_excel(writer, sheet_name='Flat_Long_Unpivoted', index=False)
                     except Exception:
                         pass
-                st.success(f"🎉 บันทึกค่าน้ำมันดิบแหล่งฝางประจำปี {sel_f_year} เรียบร้อยแล้ว! ข้อมูลจะปรากฏในรายงานรายเดือนทันที")
+                st.success(f"🎉 บันทึกค่าน้ำมันดิบแหล่งฝางประจำปี {sel_f_year} เรียบร้อยแล้ว! (บันทึกทั้งไฟล์ Excel และ JSON ในโฟลเดอร์)")
                 st.rerun()
 
-        with col_f_dl:
+        with col_f_dl_xl:
+            buf_fang_xl = io.BytesIO()
+            wb_exp = openpyxl.Workbook()
+            ws_exp = wb_exp.active
+            ws_exp.title = "Fang_Production"
+            ws_exp.append(["ปี", "ลำดับเดือน", "เดือน", "ค่าน้ำมันดิบ (บาร์เรล/วัน - BPD)"])
+            for y_s, m_d in fang_all.items():
+                for m_n in THAI_MONTHS:
+                    ws_exp.append([str(y_s), MONTH_ORDER.get(m_n, 99), m_n, float(m_d.get(m_n, 0.0))])
+            wb_exp.save(buf_fang_xl)
+            st.download_button(
+                label="📥 ดาวน์โหลด Excel (Fang.xlsx)",
+                data=buf_fang_xl.getvalue(),
+                file_name="fang_production_master.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_dl_fang_excel"
+            )
+
+        with col_f_dl_js:
             fang_backup_json = json.dumps(fang_all, indent=2, ensure_ascii=False)
             st.download_button(
-                label="📥 ดาวน์โหลดไฟล์สำรอง (Backup JSON)",
+                label="📥 ดาวน์โหลดไฟล์สำรอง (JSON)",
                 data=fang_backup_json,
                 file_name="fang_production_master.json",
                 mime="application/json",
@@ -2794,23 +2857,46 @@ def render_production_master():
                 key="btn_dl_fang_backup"
             )
 
-        with col_f_info:
-            st.caption(f"📁 บันทึกข้อมูลที่: `fang_production_master.json` พร้อมซิงค์เข้าตาราง Flat Table อัตโนมัติ")
+        st.caption("📁 บันทึกข้อมูลที่: `fang_production_master.xlsx` และ `fang_production_master.json` ในโฟลเดอร์โปรเจกต์โดยอัตโนมัติ")
 
-        with st.expander("📤 กู้คืนข้อมูลสำรองแหล่งฝาง (Restore from Backup JSON)", expanded=False):
-            st.caption("หากมีการ Redeploy บน Cloud หรือข้อมูลถูกรีเซ็ต สามารถอัปโหลดไฟล์สำรอง `fang_production_master.json` เพื่อกู้คืนตัวเลขครบทุกเดือนได้ทันที")
-            uploaded_fang = st.file_uploader("เลือกไฟล์ fang_production_master.json:", type=["json"], key="upload_fang_restore")
+        with st.expander("📤 กู้คืน / นำเข้าไฟล์ค่าน้ำมันดิบแหล่งฝาง (Import from Excel or JSON)", expanded=False):
+            st.caption("คุณสามารถเปิดไฟล์ `fang_production_master.xlsx` แก้ไขตัวเลขใน Excel ในคอมพิวเตอร์ของคุณ แล้วนำไฟล์มาอัปโหลดที่นี่เพื่ออัปเดตระบบได้ทันที")
+            uploaded_fang = st.file_uploader("เลือกไฟล์ Excel (.xlsx) หรือ JSON (.json):", type=["xlsx", "xls", "json"], key="upload_fang_restore")
             if uploaded_fang is not None:
                 try:
-                    restored_data = json.load(uploaded_fang)
-                    if st.button("⚡ ยืนยันการกู้คืนข้อมูลแหล่งฝาง", type="primary", key="btn_confirm_fang_restore"):
+                    if uploaded_fang.name.endswith(".json"):
+                        restored_data = json.load(uploaded_fang)
+                    else:
+                        wb_imp = openpyxl.load_workbook(uploaded_fang, data_only=True)
+                        ws_imp = wb_imp.active
+                        r_list = list(ws_imp.iter_rows(values_only=True))
+                        restored_data = {}
+                        if len(r_list) > 1:
+                            hdr = [str(c or '').strip() for c in r_list[0]]
+                            i_y = hdr.index("ปี") if "ปี" in hdr else 0
+                            i_m = hdr.index("เดือน") if "เดือน" in hdr else 2
+                            i_v = len(hdr) - 1
+                            for idx, h in enumerate(hdr):
+                                if "ค่าน้ำมันดิบ" in h or "BPD" in h:
+                                    i_v = idx
+                                    break
+                            for r in r_list[1:]:
+                                if r[i_y] is not None and r[i_m] is not None:
+                                    y_str = str(r[i_y]).strip()
+                                    m_str = str(r[i_m]).strip()
+                                    v_num = float(r[i_v]) if r[i_v] is not None and str(r[i_v]).replace('.', '', 1).isdigit() else 0.0
+                                    if y_str not in restored_data:
+                                        restored_data[y_str] = {}
+                                    restored_data[y_str][m_str] = v_num
+
+                    if st.button("⚡ ยืนยันการนำเข้าข้อมูลแหล่งฝาง", type="primary", key="btn_confirm_fang_restore"):
                         save_fang_master(restored_data)
                         if 'df_flat_wide' in st.session_state:
                             st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
-                        st.success("✅ กู้คืนข้อมูลค่าน้ำมันดิบแหล่งฝางสำเร็จเรียบร้อยแล้ว!")
+                        st.success("✅ นำเข้าข้อมูลค่าน้ำมันดิบแหล่งฝางสำเร็จเรียบร้อยแล้ว!")
                         st.rerun()
                 except Exception as err:
-                    st.error(f"ไฟล์ JSON ไม่ถูกต้อง: {err}")
+                    st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์: {err}")
 
 if is_admin and tab_master is not None:
     with tab_master:
