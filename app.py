@@ -26,7 +26,7 @@ st.set_page_config(
 # ----------------------------------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Hanken+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Manrope:wght@600;700;800&display=swap');
 
 /* Global Font & Canvas Base Background */
 html, body, [class*="css"], .stApp {
@@ -590,108 +590,203 @@ def parse_excel_file(file_input, filename_label):
 
     return pd.DataFrame(records)
 
-def export_ptit_styled_excel(month_name, year_val, onshore_rows, offshore_rows, onshore_sub, offshore_sub, grand_tot):
-    """สร้างไฟล์ Excel พร้อมจัดฟอร์แมตสีเหมือนต้นฉบับเล่ม PTIT Statistics 100%"""
+def export_ptit_styled_excel(month_name, year_val, onshore_rows, offshore_rows, onshore_sub, offshore_sub, grand_tot, theme="imperial"):
+    """สร้างไฟล์ Excel พร้อมจัดฟอร์แมตสไตล์ Luxury Executive ตามมาตรฐาน PTIT Focus Statistics"""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Domestic_Production_{month_name}"
     ws.views.sheetView[0].showGridLines = True
 
-    font_main = Font(name="Calibri", size=10)
-    font_bold = Font(name="Calibri", size=10, bold=True)
-    font_header = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    # Theme definitions
+    theme_palettes = {
+        'imperial': {
+            'title_bg': '1F1610', 'title_fg': 'FFFFFF',
+            'sub_bg': '332216', 'sub_fg': 'E8D5B5',
+            'hdr_bg': '24180E', 'hdr_fg': 'FFFFFF',
+            'subhdr_bg': '2E2218', 'subhdr_fg': 'F5EBE1',
+            'sec_bg': '7A5328', 'sec_fg': 'FFFFFF',
+            'zebra_bg': 'FAF7F2',
+            'total_bg': 'EFE5D5', 'total_fg': '1C1917',
+            'border_color': 'E5DFD5',
+            'tot_border_top': '7A5328', 'tot_border_bot': '451A03'
+        },
+        'navy': {
+            'title_bg': '0A1128', 'title_fg': 'FFFFFF',
+            'sub_bg': '14213D', 'sub_fg': 'E2BA55',
+            'hdr_bg': '0F172A', 'hdr_fg': 'FFFFFF',
+            'subhdr_bg': '162038', 'subhdr_fg': 'F1F5F9',
+            'sec_bg': '1E3A8A', 'sec_fg': 'FFFFFF',
+            'zebra_bg': 'F8FAFC',
+            'total_bg': 'EFF6FF', 'total_fg': '0F172A',
+            'border_color': 'E2E8F0',
+            'tot_border_top': '1E3A8A', 'tot_border_bot': '0F172A'
+        },
+        'emerald': {
+            'title_bg': '06281E', 'title_fg': 'FFFFFF',
+            'sub_bg': '0B3B2D', 'sub_fg': '6EE7B7',
+            'hdr_bg': '0F281E', 'hdr_fg': 'FFFFFF',
+            'subhdr_bg': '132620', 'subhdr_fg': 'ECFDF5',
+            'sec_bg': '047857', 'sec_fg': 'FFFFFF',
+            'zebra_bg': 'F0FDF4',
+            'total_bg': 'ECFDF5', 'total_fg': '064E3B',
+            'border_color': 'D1FAE5',
+            'tot_border_top': '047857', 'tot_border_bot': '064E3B'
+        }
+    }
+    t = theme_palettes.get(theme, theme_palettes['imperial'])
 
-    fill_header = PatternFill(start_color="7E5E3F", end_color="7E5E3F", fill_type="solid")
-    fill_section = PatternFill(start_color="B49470", end_color="B49470", fill_type="solid")
-    fill_total = PatternFill(start_color="EFEBE6", end_color="EFEBE6", fill_type="solid")
+    font_title = Font(name="Calibri", size=13, bold=True, color=t['title_fg'])
+    font_sub_title = Font(name="Calibri", size=10, bold=True, color=t['sub_fg'])
+    font_main = Font(name="Calibri", size=10, color="1C1917")
+    font_header = Font(name="Calibri", size=10.5, bold=True, color=t['hdr_fg'])
+    font_subhdr = Font(name="Calibri", size=10, bold=True, color=t['subhdr_fg'])
+    font_sec = Font(name="Calibri", size=10, bold=True, color=t['sec_fg'])
+    font_total = Font(name="Calibri", size=11, bold=True, color=t['total_fg'])
+    font_notes = Font(name="Calibri", size=9, italic=True, color="64748B")
 
-    double_bottom_border = Border(
-        top=Side(style='thin', color='000000'),
-        bottom=Side(style='double', color='000000')
+    fill_title = PatternFill(start_color=t['title_bg'], end_color=t['title_bg'], fill_type="solid")
+    fill_sub_title = PatternFill(start_color=t['sub_bg'], end_color=t['sub_bg'], fill_type="solid")
+    fill_header = PatternFill(start_color=t['hdr_bg'], end_color=t['hdr_bg'], fill_type="solid")
+    fill_subhdr = PatternFill(start_color=t['subhdr_bg'], end_color=t['subhdr_bg'], fill_type="solid")
+    fill_section = PatternFill(start_color=t['sec_bg'], end_color=t['sec_bg'], fill_type="solid")
+    fill_zebra = PatternFill(start_color=t['zebra_bg'], end_color=t['zebra_bg'], fill_type="solid")
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    fill_total = PatternFill(start_color=t['total_bg'], end_color=t['total_bg'], fill_type="solid")
+
+    thin_border = Border(
+        left=Side(style='thin', color=t['border_color']),
+        right=Side(style='thin', color=t['border_color']),
+        top=Side(style='thin', color=t['border_color']),
+        bottom=Side(style='thin', color=t['border_color'])
+    )
+    total_border = Border(
+        top=Side(style='thin', color=t['tot_border_top']),
+        bottom=Side(style='double', color=t['tot_border_bot']),
+        left=Side(style='thin', color=t['border_color']),
+        right=Side(style='thin', color=t['border_color'])
     )
 
     align_right = Alignment(horizontal='right', vertical='center')
     align_center = Alignment(horizontal='center', vertical='center')
+    align_left = Alignment(horizontal='left', vertical='center')
 
     num_fmt = '#,##0.0;(#,##0.0);"-";@'
 
-    # Header Row 1
-    ws.merge_cells('B1:D1')
-    ws['B1'] = "Domestic Production"
-    ws['B1'].font = font_header
-    ws['B1'].fill = fill_header
-    ws['B1'].alignment = align_center
-
-    ws['A1'] = f"Operator / Field ({month_name} {year_val})"
-    ws['A1'].font = font_header
-    ws['A1'].fill = fill_header
+    # Row 1: Official Masthead
+    ws.merge_cells('A1:D1')
+    ws['A1'] = "PETROLEUM INSTITUTE OF THAILAND (PTIT)"
+    ws['A1'].font = font_title
+    ws['A1'].fill = fill_title
     ws['A1'].alignment = align_center
+    ws.row_dimensions[1].height = 25
 
-    # Header Row 2
+    # Row 2: Subtitle
+    ws.merge_cells('A2:D2')
+    ws['A2'] = f"DOMESTIC PETROLEUM PRODUCTION REPORT - {str(month_name).upper()} {year_val}"
+    ws['A2'].font = font_sub_title
+    ws['A2'].fill = fill_sub_title
+    ws['A2'].alignment = align_center
+    ws.row_dimensions[2].height = 18
+
+    # Row 3: Blank gap
+    ws.row_dimensions[3].height = 7
+
+    # Row 4: Header Row 1
+    ws.merge_cells('B4:D4')
+    ws['B4'] = "Domestic Production"
+    ws['B4'].font = font_header
+    ws['B4'].fill = fill_header
+    ws['B4'].alignment = align_center
+
+    ws['A4'] = f"Operator / Field ({month_name} {year_val})"
+    ws['A4'].font = font_header
+    ws['A4'].fill = fill_header
+    ws['A4'].alignment = align_center
+    ws.row_dimensions[4].height = 24
+
+    # Row 5: Header Row 2
     headers = [
-        ("A2", "Operator / Field"),
-        ("B2", "Natural Gas\n(MMSCFD)"),
-        ("C2", "Condensate\n(BPD)"),
-        ("D2", "Crude\n(BPD)")
+        ("A5", "Operator / Field"),
+        ("B5", "Natural Gas\n(MMSCFD)"),
+        ("C5", "Condensate\n(BPD)"),
+        ("D5", "Crude\n(BPD)")
     ]
     for cell_ref, text in headers:
         ws[cell_ref] = text
-        ws[cell_ref].font = font_header
-        ws[cell_ref].fill = fill_header
+        ws[cell_ref].font = font_subhdr
+        ws[cell_ref].fill = fill_subhdr
         ws[cell_ref].alignment = align_center
-    ws.row_dimensions[2].height = 30
+        ws[cell_ref].border = thin_border
+    ws.row_dimensions[5].height = 30
 
-    current_row = 3
+    current_row = 6
 
     def write_sec(sec_name, items, sub):
         nonlocal current_row
-        ws.cell(row=current_row, column=1, value=sec_name).font = font_header
+        # Section Header Row
+        ws.cell(row=current_row, column=1, value=sec_name).font = font_sec
         ws.cell(row=current_row, column=1).fill = fill_section
+        ws.cell(row=current_row, column=1).alignment = align_left
+        ws.cell(row=current_row, column=1).border = thin_border
 
         for c_idx, val in enumerate(sub, start=2):
             cell = ws.cell(row=current_row, column=c_idx, value=val)
-            cell.font = font_header
+            cell.font = font_sec
             cell.fill = fill_section
             cell.alignment = align_right
             cell.number_format = num_fmt
+            cell.border = thin_border
+        ws.row_dimensions[current_row].height = 22
         current_row += 1
 
-        for item in items:
+        # Data Rows with Zebra Striping
+        for idx, item in enumerate(items):
+            row_fill = fill_zebra if (idx % 2 == 1) else fill_white
             ws.cell(row=current_row, column=1, value="    " + str(item['Operator_Field'])).font = font_main
+            ws.cell(row=current_row, column=1).fill = row_fill
+            ws.cell(row=current_row, column=1).alignment = align_left
+            ws.cell(row=current_row, column=1).border = thin_border
+
             for c_idx, val in enumerate([item['Gas'], item['Cond'], item['Crude']], start=2):
                 cell = ws.cell(row=current_row, column=c_idx, value=val if val >= 0.05 else (0.0 if val > 0 else 0))
                 cell.font = font_main
+                cell.fill = row_fill
                 cell.alignment = align_right
                 cell.number_format = num_fmt
+                cell.border = thin_border
+            ws.row_dimensions[current_row].height = 20
             current_row += 1
 
     write_sec("Onshore", onshore_rows, onshore_sub)
     write_sec("Offshore", offshore_rows, offshore_sub)
 
     # Total Row
-    ws.cell(row=current_row, column=1, value="Total").font = font_bold
+    ws.cell(row=current_row, column=1, value="Total").font = font_total
     ws.cell(row=current_row, column=1).fill = fill_total
     ws.cell(row=current_row, column=1).alignment = align_center
-    ws.cell(row=current_row, column=1).border = double_bottom_border
+    ws.cell(row=current_row, column=1).border = total_border
 
     for c_idx, val in enumerate(grand_tot, start=2):
         cell = ws.cell(row=current_row, column=c_idx, value=val)
-        cell.font = font_bold
+        cell.font = font_total
         cell.fill = fill_total
         cell.alignment = align_right
         cell.number_format = num_fmt
-        cell.border = double_bottom_border
+        cell.border = total_border
+    ws.row_dimensions[current_row].height = 24
     current_row += 2
 
     # Notes & Source
-    ws.cell(row=current_row, column=1, value='Note:   Data shown as "0.0" means figure less than 0.05.').font = font_main
+    ws.cell(row=current_row, column=1, value='Note:   Data shown as "0.0" means figure less than 0.05.').font = font_notes
     current_row += 1
-    ws.cell(row=current_row, column=1, value='Source: DMF,  DEDP').font = font_main
+    ws.cell(row=current_row, column=1, value='Source: Department of Mineral Fuels (DMF),  Defence Energy Department (DEDP)').font = font_notes
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='Official Publication: Petroleum Institute of Thailand (PTIT Focus Statistics)').font = font_notes
 
-    ws.column_dimensions['A'].width = 55
-    ws.column_dimensions['B'].width = 16
-    ws.column_dimensions['C'].width = 16
-    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['A'].width = 56
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 18
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -2679,9 +2774,10 @@ with tab_ptit_report:
         avail_months = df_all_data[['ปี', 'เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')
         month_options = [f"{r['เดือน']} ปี {r['ปี']}" for _, r in avail_months.iterrows()]
 
-        sel_col1, sel_col2, sel_col3 = st.columns([1.5, 1.8, 1.4])
+        # Month, Fang Input, Luxury Theme, and Filter Selector
+        sel_col1, sel_col2, sel_col3, sel_col4 = st.columns([1.4, 1.8, 1.6, 1.1])
         with sel_col1:
-            selected_month_label = st.selectbox("เลือกเดือนที่ต้องการแสดงรายงาน:", month_options, index=len(month_options)-1)
+            selected_month_label = st.selectbox("📅 เลือกเดือนรายงาน:", month_options, index=len(month_options)-1)
 
         # Parse selected month and year
         sel_month = selected_month_label.split()[0]
@@ -2742,9 +2838,26 @@ with tab_ptit_report:
                     """, unsafe_allow_html=True)
 
         with sel_col3:
+            selected_theme_label = st.selectbox(
+                "🎨 สไตล์เทมเพลต (Luxury Theme):",
+                [
+                    "👑 Imperial Bronze & Champagne Gold (Signature Luxury)",
+                    "💎 Royal Navy & Platinum (Sovereign Executive)",
+                    "🏛️ Obsidian Platinum & Emerald (Energy Terminal)"
+                ],
+                index=0
+            )
+            if "Royal Navy" in selected_theme_label:
+                report_theme_key = "navy"
+            elif "Emerald" in selected_theme_label:
+                report_theme_key = "emerald"
+            else:
+                report_theme_key = "imperial"
+
+        with sel_col4:
             st.write("")
             st.write("")
-            show_zero_fields = st.checkbox("แสดงแหล่งที่ยอดผลิตเป็น 0", value=False, help="หากติ๊กเลือก จะแสดงแหล่งที่ไม่มีการผลิตในเดือนนั้น เช่น PTTEPI / G8/50")
+            show_zero_fields = st.checkbox("แสดงแหล่งยอด 0", value=False, help="หากติ๊กเลือก จะแสดงแหล่งที่ไม่มีการผลิตในเดือนนั้น เช่น PTTEPI / G8/50")
 
         # Group and Aggregate by PTIT Operator / Field
         # Group keys: PTIT_Region, PTIT_Operator_Field, PTIT_Order
@@ -2815,20 +2928,124 @@ with tab_ptit_report:
             onshore_sub[2] + offshore_sub[2]
         )
 
-        # Export Buttons
-        btn_c1, btn_c2 = st.columns([2, 3])
+        total_gas = grand_total[0]
+        total_cond = grand_total[1]
+        total_crude = grand_total[2]
+        total_boed = (total_gas * 1000 / 5.615) + total_cond + total_crude
+
+        # ----------------------------------------------------
+        # Executive Bento Metric Ribbon (Key Production Highlights)
+        # ----------------------------------------------------
+        bento_themes = {
+            'imperial': {
+                'card_bg': '#FFFFFF',
+                'border': 'rgba(197, 160, 89, 0.45)',
+                'halo_border': '1.5px solid #C5A059',
+                'halo_shadow': '0 8px 24px rgba(197, 160, 89, 0.22)',
+                'tag_bg': 'rgba(197, 160, 89, 0.15)',
+                'tag_fg': '#8A6239',
+                'accent_num': '#1C1917',
+                'boed_bg': 'linear-gradient(135deg, #FFFDF9 0%, #FBF6EE 100%)'
+            },
+            'navy': {
+                'card_bg': '#FFFFFF',
+                'border': 'rgba(30, 58, 138, 0.35)',
+                'halo_border': '1.5px solid #38BDF8',
+                'halo_shadow': '0 8px 24px rgba(56, 189, 248, 0.22)',
+                'tag_bg': 'rgba(56, 189, 248, 0.15)',
+                'tag_fg': '#0284C7',
+                'accent_num': '#0F172A',
+                'boed_bg': 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)'
+            },
+            'emerald': {
+                'card_bg': '#FFFFFF',
+                'border': 'rgba(4, 120, 87, 0.35)',
+                'halo_border': '1.5px solid #10B981',
+                'halo_shadow': '0 8px 24px rgba(16, 185, 129, 0.22)',
+                'tag_bg': 'rgba(16, 185, 129, 0.15)',
+                'tag_fg': '#047857',
+                'accent_num': '#064E3B',
+                'boed_bg': 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
+            }
+        }
+        bt = bento_themes[report_theme_key]
+
+        st.markdown(f"""
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 15px 0 20px 0;">
+            <!-- Gas Card -->
+            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #0284C7; letter-spacing: 0.05em; text-transform: uppercase;">🔵 ก๊าซธรรมชาติ (Gas)</span>
+                    <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">MMSCFD</span>
+                </div>
+                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                    {total_gas:,.1f}
+                </div>
+                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                    Onshore: <b>{onshore_sub[0]:,.1f}</b> • Offshore: <b>{offshore_sub[0]:,.1f}</b>
+                </div>
+            </div>
+
+            <!-- Condensate Card -->
+            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #D97706; letter-spacing: 0.05em; text-transform: uppercase;">🟠 ก๊าซธรรมชาติเหลว (Cond)</span>
+                    <span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
+                </div>
+                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                    {total_cond:,.1f}
+                </div>
+                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                    อ่าวไทย (Offshore Gulf of Thailand 100%)
+                </div>
+            </div>
+
+            <!-- Crude Oil Card -->
+            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">🛢️ น้ำมันดิบ (Crude Oil)</span>
+                    <span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
+                </div>
+                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                    {total_crude:,.1f}
+                </div>
+                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                    Onshore: <b>{onshore_sub[2]:,.1f}</b> • Offshore: <b>{offshore_sub[2]:,.1f}</b>
+                </div>
+            </div>
+
+            <!-- Total BOED Executive Card -->
+            <div style="background: {bt['boed_bg']}; border: {bt['halo_border']}; border-radius: 14px; padding: 14px 18px; box-shadow: {bt['halo_shadow']};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 800; color: {bt['tag_fg']}; letter-spacing: 0.06em; text-transform: uppercase;">⚡ ผลผลิตเทียบเท่าน้ำมันดิบ</span>
+                    <span style="background: {bt['tag_bg']}; color: {bt['tag_fg']}; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;">BOED</span>
+                </div>
+                <div style="font-size: 24px; font-weight: 900; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                    {total_boed:,.1f}
+                </div>
+                <div style="font-size: 11px; color: #78716C; margin-top: 5px;">
+                    รวมทุกผลิตภัณฑ์ (Gas 5.615 kcf = 1 bbl)
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Action Toolbar
+        btn_c1, btn_c2 = st.columns([2.5, 3.5])
         with btn_c1:
             excel_buf = export_ptit_styled_excel(
-                sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total
+                sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total, theme=report_theme_key
             )
             st.download_button(
-                label=f"📥 ดาวน์โหลด Excel ตาราง PTIT ({sel_month} {sel_year})",
+                label=f"📥 ดาวน์โหลด Excel สไตล์ Luxury Executive ({report_theme_key.capitalize()} Theme)",
                 data=excel_buf,
-                file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}.xlsx",
+                file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}_{report_theme_key}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
             )
+        with btn_c2:
+            st.caption(f"✨ ตารางด้านล่างแสดงผลในรูปแบบ **{selected_theme_label.split('(')[0].strip()}** รองรับการพิมพ์และการบันทึกเป็น PDF สไตล์ Executive Letterhead (กด `Ctrl + P`)")
 
         # HTML Table Generator
         def fmt(val, is_bpd=False):
@@ -2840,125 +3057,400 @@ with tab_ptit_report:
                 return f"{val:,.1f}"
             return f"{val:.1f}"
 
+        # Theme Design Tokens for Table
+        theme_table_tokens = {
+            'imperial': {
+                'card_bg': '#FFFFFF',
+                'card_border': 'rgba(197, 160, 89, 0.45)',
+                'card_shadow': '0 20px 48px -12px rgba(44, 30, 18, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+                'masthead_bg': 'linear-gradient(135deg, #1C1917 0%, #2A2118 60%, #38271A 100%)',
+                'masthead_accent': '#C5A059',
+                'masthead_org': '#D4AF37',
+                'badge_bg': 'rgba(212, 175, 55, 0.18)',
+                'badge_fg': '#E5C378',
+                'badge_border': 'rgba(212, 175, 55, 0.4)',
+                'th_main_bg': 'linear-gradient(135deg, #24180E 0%, #332216 100%)',
+                'th_sub_bg': '#2E2218',
+                'th_sub_color': '#FAF6F0',
+                'unit_chip_bg': 'rgba(197, 160, 89, 0.22)',
+                'unit_chip_color': '#F5D899',
+                'unit_chip_border': 'rgba(197, 160, 89, 0.45)',
+                'sec_bg': 'linear-gradient(90deg, #784E20 0%, #966734 50%, #7D5325 100%)',
+                'sec_color': '#FFFFFF',
+                'sec_badge_bg': 'rgba(0, 0, 0, 0.2)',
+                'sec_badge_color': '#FFFFFF',
+                'zebra_bg': '#FAF7F2',
+                'hover_bg': '#F5EFE6',
+                'hover_border': '#C5A059',
+                'tot_bg': 'linear-gradient(90deg, #EFE5D5 0%, #E3D3BE 100%)',
+                'tot_color': '#1C1917',
+                'tot_border_top': '#784E20',
+                'tot_border_bot': '#3D240E',
+                'grid_border': '#E8E2D8'
+            },
+            'navy': {
+                'card_bg': '#FFFFFF',
+                'card_border': 'rgba(30, 58, 138, 0.35)',
+                'card_shadow': '0 20px 48px -12px rgba(15, 23, 42, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+                'masthead_bg': 'linear-gradient(135deg, #0A1128 0%, #0F172A 60%, #1E293B 100%)',
+                'masthead_accent': '#38BDF8',
+                'masthead_org': '#93C5FD',
+                'badge_bg': 'rgba(56, 189, 248, 0.18)',
+                'badge_fg': '#38BDF8',
+                'badge_border': 'rgba(56, 189, 248, 0.4)',
+                'th_main_bg': 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+                'th_sub_bg': '#162038',
+                'th_sub_color': '#F1F5F9',
+                'unit_chip_bg': 'rgba(56, 189, 248, 0.18)',
+                'unit_chip_color': '#38BDF8',
+                'unit_chip_border': 'rgba(56, 189, 248, 0.4)',
+                'sec_bg': 'linear-gradient(90deg, #1E3A8A 0%, #2563EB 50%, #1E40AF 100%)',
+                'sec_color': '#FFFFFF',
+                'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+                'sec_badge_color': '#FFFFFF',
+                'zebra_bg': '#F8FAFC',
+                'hover_bg': '#EFF6FF',
+                'hover_border': '#38BDF8',
+                'tot_bg': 'linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 100%)',
+                'tot_color': '#0F172A',
+                'tot_border_top': '#1E3A8A',
+                'tot_border_bot': '#0F172A',
+                'grid_border': '#E2E8F0'
+            },
+            'emerald': {
+                'card_bg': '#FFFFFF',
+                'card_border': 'rgba(4, 120, 87, 0.35)',
+                'card_shadow': '0 20px 48px -12px rgba(6, 78, 59, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+                'masthead_bg': 'linear-gradient(135deg, #091310 0%, #0F201B 60%, #162F27 100%)',
+                'masthead_accent': '#10B981',
+                'masthead_org': '#6EE7B7',
+                'badge_bg': 'rgba(16, 185, 129, 0.18)',
+                'badge_fg': '#34D399',
+                'badge_border': 'rgba(16, 185, 129, 0.4)',
+                'th_main_bg': 'linear-gradient(135deg, #0F281E 0%, #132620 100%)',
+                'th_sub_bg': '#132620',
+                'th_sub_color': '#ECFDF5',
+                'unit_chip_bg': 'rgba(16, 185, 129, 0.18)',
+                'unit_chip_color': '#34D399',
+                'unit_chip_border': 'rgba(16, 185, 129, 0.4)',
+                'sec_bg': 'linear-gradient(90deg, #065F46 0%, #047857 50%, #064E3B 100%)',
+                'sec_color': '#FFFFFF',
+                'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+                'sec_badge_color': '#FFFFFF',
+                'zebra_bg': '#F0FDF4',
+                'hover_bg': '#ECFDF5',
+                'hover_border': '#10B981',
+                'tot_bg': 'linear-gradient(90deg, #ECFDF5 0%, #D1FAE5 100%)',
+                'tot_color': '#064E3B',
+                'tot_border_top': '#065F46',
+                'tot_border_bot': '#064E3B',
+                'grid_border': '#D1FAE5'
+            }
+        }
+        tk = theme_table_tokens[report_theme_key]
+
         html_table = f"""
         <style>
-            .ptit-table {{
+            .ptit-luxury-wrapper {{
+                background: {tk['card_bg']};
+                border: 1px solid {tk['card_border']};
+                box-shadow: {tk['card_shadow']};
+                border-radius: 18px;
+                overflow: hidden;
+                margin-top: 20px;
+                font-family: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            }}
+            .ptit-masthead {{
+                background: {tk['masthead_bg']};
+                border-top: 4px solid {tk['masthead_accent']};
+                padding: 22px 28px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 14px;
+            }}
+            .ptit-masthead-org {{
+                font-family: 'Cinzel', 'Playfair Display', Georgia, serif;
+                font-size: 12px;
+                font-weight: 700;
+                color: {tk['masthead_org']};
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }}
+            .ptit-masthead-title {{
+                font-family: 'Manrope', 'Hanken Grotesk', sans-serif;
+                font-size: 21px;
+                font-weight: 800;
+                color: #FFFFFF;
+                letter-spacing: -0.015em;
+                line-height: 1.25;
+            }}
+            .ptit-masthead-sub {{
+                font-size: 13px;
+                color: #E2E8F0;
+                margin-top: 3px;
+                opacity: 0.92;
+            }}
+            .ptit-masthead-badges {{
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 6px;
+            }}
+            .ptit-badge {{
+                font-size: 10px;
+                font-weight: 700;
+                padding: 4px 10px;
+                border-radius: 6px;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                display: inline-block;
+            }}
+            .ptit-badge-gold {{
+                background: {tk['badge_bg']};
+                color: {tk['badge_fg']};
+                border: 1px solid {tk['badge_border']};
+            }}
+            .ptit-table-responsive {{
+                overflow-x: auto;
+                width: 100%;
+            }}
+            .ptit-luxury-table {{
                 width: 100%;
                 border-collapse: collapse;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 font-size: 13.5px;
-                color: #222;
-                margin-top: 15px;
+                color: #1E293B;
             }}
-            .ptit-table th, .ptit-table td {{
-                border: 1px solid #dcdcdc;
-                padding: 5px 12px;
+            .ptit-luxury-table th, .ptit-luxury-table td {{
+                border: 1px solid {tk['grid_border']};
+                padding: 7px 14px;
+                line-height: 1.4;
             }}
-            .header-main {{
-                background-color: #7A5B3E;
-                color: #ffffff;
+            .th-main {{
+                background: {tk['th_main_bg']};
+                color: #FFFFFF;
                 text-align: center;
-                font-weight: 600;
+                font-weight: 700;
+                font-size: 13.5px;
+                letter-spacing: 0.02em;
+                padding: 10px 14px !important;
             }}
-            .header-sec {{
-                background-color: #B49470;
-                color: #ffffff;
-                font-weight: bold;
+            .th-col {{
+                background: {tk['th_sub_bg']};
+                color: {tk['th_sub_color']};
+                text-align: center;
+                font-weight: 700;
+                font-size: 13px;
+                padding: 9px 12px !important;
             }}
-            .row-sec {{
-                background-color: #B49470;
-                color: #ffffff;
-                font-weight: bold;
+            .unit-pill {{
+                display: inline-block;
+                background: {tk['unit_chip_bg']};
+                color: {tk['unit_chip_color']};
+                border: 1px solid {tk['unit_chip_border']};
+                font-size: 10.5px;
+                font-weight: 700;
+                padding: 1px 7px;
+                border-radius: 5px;
+                margin-top: 3px;
             }}
-            .row-sec td {{
-                border: 1px solid #a6845e;
+            .tr-section {{
+                background: {tk['sec_bg']};
+                color: {tk['sec_color']};
+                font-weight: 700;
+                font-size: 13.5px;
             }}
-            .row-item:hover {{
-                background-color: #f7f5f2;
+            .tr-section td {{
+                border-color: rgba(0, 0, 0, 0.15) !important;
+                padding: 8px 14px !important;
             }}
-            .row-total {{
-                background-color: #f4efe9;
-                font-weight: bold;
-                border-top: 2px solid #333;
-                border-bottom: 3px double #333;
+            .sec-badge {{
+                display: inline-block;
+                background: {tk['sec_badge_bg']};
+                color: {tk['sec_badge_color']};
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.03em;
             }}
-            .num {{
+            .tr-item-even {{
+                background: {tk['zebra_bg']};
+                transition: background-color 150ms ease, border-left 150ms ease;
+            }}
+            .tr-item-odd {{
+                background: #FFFFFF;
+                transition: background-color 150ms ease, border-left 150ms ease;
+            }}
+            .tr-item-even:hover, .tr-item-odd:hover {{
+                background: {tk['hover_bg']} !important;
+            }}
+            .tr-item-even:hover td:first-child, .tr-item-odd:hover td:first-child {{
+                border-left: 3px solid {tk['hover_border']} !important;
+                padding-left: 25px !important;
+            }}
+            .tr-total {{
+                background: {tk['tot_bg']};
+                color: {tk['tot_color']};
+                font-weight: 800;
+                border-top: 2px solid {tk['tot_border_top']} !important;
+                border-bottom: 3px double {tk['tot_border_bot']} !important;
+                font-size: 14px;
+            }}
+            .tr-total td {{
+                padding: 11px 14px !important;
+                border-top: 2px solid {tk['tot_border_top']} !important;
+                border-bottom: 3px double {tk['tot_border_bot']} !important;
+            }}
+            .num-cell {{
                 text-align: right;
+                font-family: 'JetBrains Mono', 'SF Mono', monospace;
+                font-size: 13px;
                 font-variant-numeric: tabular-nums;
+                letter-spacing: -0.01em;
             }}
-            .footer-note {{
+            .tot-num {{
+                font-size: 14.5px !important;
+                font-weight: 800 !important;
+            }}
+            .ptit-footnote-box {{
+                background: #FAFAF9;
+                border-top: 1px solid {tk['grid_border']};
+                padding: 14px 24px;
                 font-size: 11.5px;
-                color: #555;
-                margin-top: 8px;
+                color: #64748B;
+                display: flex;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 10px;
+            }}
+            @media print {{
+                body * {{
+                    visibility: hidden !important;
+                }}
+                .ptit-luxury-wrapper, .ptit-luxury-wrapper * {{
+                    visibility: visible !important;
+                }}
+                .ptit-luxury-wrapper {{
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    border: 1px solid #777 !important;
+                    box-shadow: none !important;
+                }}
             }}
         </style>
 
-        <table class="ptit-table">
-            <thead>
-                <tr>
-                    <th rowspan="2" class="header-main" style="width: 45%;">Operator / Field</th>
-                    <th colspan="3" class="header-main">Domestic Production</th>
-                </tr>
-                <tr>
-                    <th class="header-main" style="width: 18%;">Natural Gas<br><span style="font-size:11px; font-weight:normal;">(MMSCFD)</span></th>
-                    <th class="header-main" style="width: 18%;">Condensate<br><span style="font-size:11px; font-weight:normal;">(BPD)</span></th>
-                    <th class="header-main" style="width: 19%;">Crude<br><span style="font-size:11px; font-weight:normal;">(BPD)</span></th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Onshore Header -->
-                <tr class="row-sec">
-                    <td>Onshore</td>
-                    <td class="num">{fmt(onshore_sub[0])}</td>
-                    <td class="num">{fmt(onshore_sub[1], True)}</td>
-                    <td class="num">{fmt(onshore_sub[2], True)}</td>
-                </tr>
+        <div class="ptit-luxury-wrapper">
+            <!-- Executive Masthead Banner -->
+            <div class="ptit-masthead">
+                <div>
+                    <div class="ptit-masthead-org">PETROLEUM INSTITUTE OF THAILAND</div>
+                    <div class="ptit-masthead-title">DOMESTIC PETROLEUM PRODUCTION REPORT</div>
+                    <div class="ptit-masthead-sub">รายงานสถิติปริมาณการผลิตปิโตรเลียมในประเทศ ประจำเดือน {sel_month} {sel_year}</div>
+                </div>
+                <div class="ptit-masthead-badges">
+                    <span class="ptit-badge ptit-badge-gold">🔒 OFFICIAL AUDITED RECORD</span>
+                    <span class="ptit-badge ptit-badge-gold">📅 PTIT FOCUS RELEASE</span>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="ptit-table-responsive">
+                <table class="ptit-luxury-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="th-main" style="width: 46%; text-align: left; padding-left: 20px !important;">
+                                Operator / Field <span style="font-size: 12px; font-weight: normal; opacity: 0.85;">({sel_month} {sel_year})</span>
+                            </th>
+                            <th colspan="3" class="th-main">
+                                Domestic Production
+                            </th>
+                        </tr>
+                        <tr>
+                            <th class="th-col" style="width: 18%;">
+                                Natural Gas<br><span class="unit-pill">MMSCFD</span>
+                            </th>
+                            <th class="th-col" style="width: 18%;">
+                                Condensate<br><span class="unit-pill">BPD</span>
+                            </th>
+                            <th class="th-col" style="width: 18%;">
+                                Crude<br><span class="unit-pill">BPD</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Onshore Section Ribbon -->
+                        <tr class="tr-section">
+                            <td style="padding-left: 18px !important;">
+                                <span class="sec-badge">🏞️ ONSHORE BASIN</span>
+                            </td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[0])}</td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[1], True)}</td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[2], True)}</td>
+                        </tr>
         """
 
-        for it in onshore_items:
+        for idx, it in enumerate(onshore_items):
+            row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
             html_table += f"""
-                <tr class="row-item">
-                    <td style="padding-left: 22px;">{it['Operator_Field']}</td>
-                    <td class="num">{fmt(it['Gas'])}</td>
-                    <td class="num">{fmt(it['Cond'], True)}</td>
-                    <td class="num">{fmt(it['Crude'], True)}</td>
-                </tr>
+                        <tr class="{row_cls}">
+                            <td style="padding-left: 28px;">{it['Operator_Field']}</td>
+                            <td class="num-cell">{fmt(it['Gas'])}</td>
+                            <td class="num-cell">{fmt(it['Cond'], True)}</td>
+                            <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                        </tr>
             """
 
         html_table += f"""
-                <!-- Offshore Header -->
-                <tr class="row-sec">
-                    <td>Offshore</td>
-                    <td class="num">{fmt(offshore_sub[0])}</td>
-                    <td class="num">{fmt(offshore_sub[1], True)}</td>
-                    <td class="num">{fmt(offshore_sub[2], True)}</td>
-                </tr>
+                        <!-- Offshore Section Ribbon -->
+                        <tr class="tr-section">
+                            <td style="padding-left: 18px !important;">
+                                <span class="sec-badge">🌊 OFFSHORE GULF OF THAILAND</span>
+                            </td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[0])}</td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[1], True)}</td>
+                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[2], True)}</td>
+                        </tr>
         """
 
-        for it in offshore_items:
+        for idx, it in enumerate(offshore_items):
+            row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
             html_table += f"""
-                <tr class="row-item">
-                    <td style="padding-left: 22px;">{it['Operator_Field']}</td>
-                    <td class="num">{fmt(it['Gas'])}</td>
-                    <td class="num">{fmt(it['Cond'], True)}</td>
-                    <td class="num">{fmt(it['Crude'], True)}</td>
-                </tr>
+                        <tr class="{row_cls}">
+                            <td style="padding-left: 28px;">{it['Operator_Field']}</td>
+                            <td class="num-cell">{fmt(it['Gas'])}</td>
+                            <td class="num-cell">{fmt(it['Cond'], True)}</td>
+                            <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                        </tr>
             """
 
         html_table += f"""
-                <!-- Total -->
-                <tr class="row-total">
-                    <td style="text-align: center;">Total</td>
-                    <td class="num">{fmt(grand_total[0])}</td>
-                    <td class="num">{fmt(grand_total[1], True)}</td>
-                    <td class="num">{fmt(grand_total[2], True)}</td>
-                </tr>
-            </tbody>
-        </table>
+                        <!-- Grand Total Row -->
+                        <tr class="tr-total">
+                            <td style="text-align: center; font-family: 'Manrope', sans-serif;">Total Domestic Production</td>
+                            <td class="num-cell tot-num">{fmt(grand_total[0])}</td>
+                            <td class="num-cell tot-num">{fmt(grand_total[1], True)}</td>
+                            <td class="num-cell tot-num">{fmt(grand_total[2], True)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="footer-note">
-            <div><b>Note:</b> &nbsp; Data shown as "0.0" means figure less than 0.05.</div>
-            <div style="margin-top: 3px;"><b>Source:</b> DMF, &nbsp;DEDP</div>
+            <!-- Footnote & Authority Citations -->
+            <div class="ptit-footnote-box">
+                <div>
+                    <div><b>Note:</b> &nbsp; Data shown as "0.0" indicates production figure less than 0.05.</div>
+                    <div style="margin-top: 3px;"><b>Source:</b> Department of Mineral Fuels (DMF), &nbsp;Defence Energy Department (DEDP)</div>
+                </div>
+                <div style="text-align: right;">
+                    <div><b>Official Publication:</b> Petroleum Institute of Thailand (PTIT Focus Statistics)</div>
+                    <div style="margin-top: 3px; color: #94A3B8;">Verified National Hydrocarbon Production Telemetry</div>
+                </div>
+            </div>
         </div>
         """
 
