@@ -794,6 +794,372 @@ def export_ptit_styled_excel(month_name, year_val, onshore_rows, offshore_rows, 
     return buf
 
 # ----------------------------------------------------
+# Annual Report Calculation & Excel Export Helpers
+# ----------------------------------------------------
+DAYS_IN_MONTH = {
+    'มกราคม': 31, 'กุมภาพันธ์': 28, 'มีนาคม': 31, 'เมษายน': 30,
+    'พฤษภาคม': 31, 'มิถุนายน': 30, 'กรกฎาคม': 31, 'สิงหาคม': 31,
+    'กันยายน': 30, 'ตุลาคม': 31, 'พฤศจิกายน': 30, 'ธันวาคม': 31
+}
+
+def get_days_in_month(month_name, year_val=2569):
+    try:
+        y_int = int(year_val)
+        y_ce = y_int - 543 if y_int > 2400 else y_int
+    except Exception:
+        y_ce = 2026
+    if str(month_name).strip() == 'กุมภาพันธ์':
+        if (y_ce % 4 == 0 and y_ce % 100 != 0) or (y_ce % 400 == 0):
+            return 29
+        return 28
+    return DAYS_IN_MONTH.get(str(month_name).strip(), 30)
+
+def export_annual_styled_excel(year_val, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_tot, active_months, theme="imperial"):
+    """สร้างไฟล์ Excel รายงานประจำปีสไตล์ Luxury Executive พร้อม Daily Avg และ Cumulative Total"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Annual_Production_{year_val}"
+    ws.views.sheetView[0].showGridLines = True
+
+    theme_palettes = {
+        'imperial': {
+            'title_bg': '1F1610', 'title_fg': 'FFFFFF', 'sub_bg': '332216', 'sub_fg': 'E8D5B5',
+            'hdr_bg': '24180E', 'hdr_fg': 'FFFFFF', 'subhdr_bg': '2E2218', 'subhdr_fg': 'F5EBE1',
+            'sec_bg': '7A5328', 'sec_fg': 'FFFFFF', 'zebra_bg': 'FAF7F2', 'total_bg': 'EFE5D5',
+            'total_fg': '1C1917', 'border_color': 'E5DFD5', 'tot_border_top': '7A5328', 'tot_border_bot': '451A03'
+        },
+        'navy': {
+            'title_bg': '0A1128', 'title_fg': 'FFFFFF', 'sub_bg': '14213D', 'sub_fg': 'E2BA55',
+            'hdr_bg': '0F172A', 'hdr_fg': 'FFFFFF', 'subhdr_bg': '162038', 'subhdr_fg': 'F1F5F9',
+            'sec_bg': '1E3A8A', 'sec_fg': 'FFFFFF', 'zebra_bg': 'F8FAFC', 'total_bg': 'EFF6FF',
+            'total_fg': '0F172A', 'border_color': 'E2E8F0', 'tot_border_top': '1E3A8A', 'tot_border_bot': '0F172A'
+        },
+        'emerald': {
+            'title_bg': '06281E', 'title_fg': 'FFFFFF', 'sub_bg': '0B3B2D', 'sub_fg': '6EE7B7',
+            'hdr_bg': '0F281E', 'hdr_fg': 'FFFFFF', 'subhdr_bg': '132620', 'subhdr_fg': 'ECFDF5',
+            'sec_bg': '047857', 'sec_fg': 'FFFFFF', 'zebra_bg': 'F0FDF4', 'total_bg': 'ECFDF5',
+            'total_fg': '064E3B', 'border_color': 'D1FAE5', 'tot_border_top': '047857', 'tot_border_bot': '064E3B'
+        }
+    }
+    t = theme_palettes.get(theme, theme_palettes['imperial'])
+
+    font_title = Font(name="Calibri", size=13, bold=True, color=t['title_fg'])
+    font_sub_title = Font(name="Calibri", size=10, bold=True, color=t['sub_fg'])
+    font_main = Font(name="Calibri", size=10, color="1C1917")
+    font_header = Font(name="Calibri", size=10, bold=True, color=t['hdr_fg'])
+    font_subhdr = Font(name="Calibri", size=9.5, bold=True, color=t['subhdr_fg'])
+    font_sec = Font(name="Calibri", size=10, bold=True, color=t['sec_fg'])
+    font_total = Font(name="Calibri", size=10.5, bold=True, color=t['total_fg'])
+    font_notes = Font(name="Calibri", size=9, italic=True, color="64748B")
+
+    fill_title = PatternFill(start_color=t['title_bg'], end_color=t['title_bg'], fill_type="solid")
+    fill_sub_title = PatternFill(start_color=t['sub_bg'], end_color=t['sub_bg'], fill_type="solid")
+    fill_header = PatternFill(start_color=t['hdr_bg'], end_color=t['hdr_bg'], fill_type="solid")
+    fill_subhdr = PatternFill(start_color=t['subhdr_bg'], end_color=t['subhdr_bg'], fill_type="solid")
+    fill_section = PatternFill(start_color=t['sec_bg'], end_color=t['sec_bg'], fill_type="solid")
+    fill_zebra = PatternFill(start_color=t['zebra_bg'], end_color=t['zebra_bg'], fill_type="solid")
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    fill_total = PatternFill(start_color=t['total_bg'], end_color=t['total_bg'], fill_type="solid")
+
+    thin_border = Border(
+        left=Side(style='thin', color=t['border_color']), right=Side(style='thin', color=t['border_color']),
+        top=Side(style='thin', color=t['border_color']), bottom=Side(style='thin', color=t['border_color'])
+    )
+    total_border = Border(
+        left=Side(style='thin', color=t['border_color']), right=Side(style='thin', color=t['border_color']),
+        top=Side(style='medium', color=t['tot_border_top']), bottom=Side(style='double', color=t['tot_border_bot'])
+    )
+
+    # 1. Document Title
+    ws.merge_cells('A1:J1')
+    c1 = ws['A1']
+    c1.value = "PETROLEUM INSTITUTE OF THAILAND"
+    c1.font = font_title
+    c1.fill = fill_title
+    c1.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 24
+
+    ws.merge_cells('A2:J2')
+    c2 = ws['A2']
+    c2.value = f"DOMESTIC PETROLEUM PRODUCTION ANNUAL REPORT ({year_val})"
+    c2.font = font_sub_title
+    c2.fill = fill_sub_title
+    c2.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    # Period Info
+    ws.merge_cells('A3:J3')
+    c3 = ws['A3']
+    period_txt = f"Annual Production Summary & Cumulative Output (YTD {len(active_months)} Months: {active_months[0]} - {active_months[-1]} {year_val})" if active_months else f"Annual Production Summary ({year_val})"
+    c3.value = period_txt
+    c3.font = Font(name="Calibri", size=9.5, italic=True, color="475569")
+    c3.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 16
+
+    # 2. Table Headers (Row 4 & 5)
+    headers_top = [
+        ('A4', 'A5', "Operator / Field"),
+        ('B4', 'C4', "Natural Gas"),
+        ('D4', 'E4', "Condensate"),
+        ('F4', 'G4', "Crude Oil"),
+        ('H4', 'I4', "Total Energy Equivalent"),
+        ('J4', 'J5', "Share (%)")
+    ]
+    for start_col, end_col, title in headers_top:
+        ws.merge_cells(f"{start_col}:{end_col}")
+        cell = ws[start_col]
+        cell.value = title
+        cell.font = font_header
+        cell.fill = fill_header
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    headers_sub = [
+        ('B5', "Daily (MMSCFD)"), ('C5', "Total (BCF)"),
+        ('D5', "Daily (BPD)"), ('E5', "Total (MMbbl)"),
+        ('F5', "Daily (BPD)"), ('G5', "Total (MMbbl)"),
+        ('H5', "Daily (BOED)"), ('I5', "Total (MMBOE)")
+    ]
+    for cell_ref, sub_title in headers_sub:
+        cell = ws[cell_ref]
+        cell.value = sub_title
+        cell.font = font_subhdr
+        cell.fill = fill_subhdr
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for r in range(4, 6):
+        for col_idx in range(1, 11):
+            ws.cell(row=r, column=col_idx).border = thin_border
+
+    ws.row_dimensions[4].height = 20
+    ws.row_dimensions[5].height = 20
+
+    current_row = 6
+
+    def write_section(sec_title, items, sub_vals):
+        nonlocal current_row
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=10)
+        sec_cell = ws.cell(row=current_row, column=1, value=sec_title)
+        sec_cell.font = font_sec
+        sec_cell.fill = fill_section
+        sec_cell.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[current_row].height = 18
+        current_row += 1
+
+        for idx, item in enumerate(items):
+            fill = fill_zebra if (idx % 2 == 1) else fill_white
+            ws.row_dimensions[current_row].height = 17
+
+            c_name = ws.cell(row=current_row, column=1, value=f"  {item['Operator_Field']}")
+            c_name.font = font_main
+            c_name.fill = fill
+            c_name.border = thin_border
+
+            num_cols = [
+                (2, item.get('Gas_Avg', 0.0), '#,##0.0'),
+                (3, item.get('Gas_Cum', 0.0), '#,##0.00'),
+                (4, item.get('Cond_Avg', 0.0), '#,##0'),
+                (5, item.get('Cond_Cum', 0.0), '#,##0.00'),
+                (6, item.get('Crude_Avg', 0.0), '#,##0'),
+                (7, item.get('Crude_Cum', 0.0), '#,##0.00'),
+                (8, item.get('BOED_Avg', 0.0), '#,##0'),
+                (9, item.get('BOED_Cum', 0.0), '#,##0.00'),
+                (10, item.get('Share_Pct', 0.0) / 100.0, '0.0%')
+            ]
+            for col_idx, val, num_fmt in num_cols:
+                cell = ws.cell(row=current_row, column=col_idx)
+                if val is not None and val > 0.0001:
+                    cell.value = val
+                    cell.number_format = num_fmt
+                else:
+                    cell.value = "-"
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.font = font_main
+                cell.fill = fill
+                cell.border = thin_border
+            current_row += 1
+
+        # Subtotal
+        ws.row_dimensions[current_row].height = 18
+        c_sub_label = ws.cell(row=current_row, column=1, value=f"Total {sec_title.split('(')[0].strip()}")
+        c_sub_label.font = font_total
+        c_sub_label.fill = fill_total
+        c_sub_label.border = thin_border
+
+        sub_cols = [
+            (2, sub_vals.get('Gas_Avg', 0.0), '#,##0.0'),
+            (3, sub_vals.get('Gas_Cum', 0.0), '#,##0.00'),
+            (4, sub_vals.get('Cond_Avg', 0.0), '#,##0'),
+            (5, sub_vals.get('Cond_Cum', 0.0), '#,##0.00'),
+            (6, sub_vals.get('Crude_Avg', 0.0), '#,##0'),
+            (7, sub_vals.get('Crude_Cum', 0.0), '#,##0.00'),
+            (8, sub_vals.get('BOED_Avg', 0.0), '#,##0'),
+            (9, sub_vals.get('BOED_Cum', 0.0), '#,##0.00'),
+            (10, sub_vals.get('Share_Pct', 0.0) / 100.0, '0.0%')
+        ]
+        for col_idx, val, num_fmt in sub_cols:
+            cell = ws.cell(row=current_row, column=col_idx)
+            if val is not None and val > 0.0001:
+                cell.value = val
+                cell.number_format = num_fmt
+            else:
+                cell.value = "-"
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = font_total
+            cell.fill = fill_total
+            cell.border = thin_border
+        current_row += 1
+
+    write_section("ONSHORE BASIN", onshore_items, onshore_sub)
+    write_section("OFFSHORE GULF OF THAILAND", offshore_items, offshore_sub)
+
+    # Grand Total
+    ws.row_dimensions[current_row].height = 20
+    c_tot_label = ws.cell(row=current_row, column=1, value="GRAND TOTAL")
+    c_tot_label.font = Font(name="Calibri", size=11, bold=True, color=t['total_fg'])
+    c_tot_label.fill = fill_total
+    c_tot_label.border = total_border
+
+    tot_cols = [
+        (2, grand_tot.get('Gas_Avg', 0.0), '#,##0.0'),
+        (3, grand_tot.get('Gas_Cum', 0.0), '#,##0.00'),
+        (4, grand_tot.get('Cond_Avg', 0.0), '#,##0'),
+        (5, grand_tot.get('Cond_Cum', 0.0), '#,##0.00'),
+        (6, grand_tot.get('Crude_Avg', 0.0), '#,##0'),
+        (7, grand_tot.get('Crude_Cum', 0.0), '#,##0.00'),
+        (8, grand_tot.get('BOED_Avg', 0.0), '#,##0'),
+        (9, grand_tot.get('BOED_Cum', 0.0), '#,##0.00'),
+        (10, 1.0, '0.0%')
+    ]
+    for col_idx, val, num_fmt in tot_cols:
+        cell = ws.cell(row=current_row, column=col_idx)
+        cell.value = val
+        cell.number_format = num_fmt
+        cell.font = Font(name="Calibri", size=11, bold=True, color=t['total_fg'])
+        cell.fill = fill_total
+        cell.border = total_border
+    current_row += 2
+
+    # Footnotes
+    ws.cell(row=current_row, column=1, value='Note:   1. Daily rates are weighted averages based on actual operating days in each active reporting month.').font = font_notes
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='        2. Cumulative volumes: Natural Gas in BCF (Billion Cubic Feet), Liquids in MMbbl (Million Barrels), Energy in MMBOE.').font = font_notes
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='        3. Crude oil includes Sirikit, Offshore fields, and Defence Energy Department (DEDP Fang).').font = font_notes
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='Source: Department of Mineral Fuels (DMF), Defence Energy Department (DEDP)').font = font_notes
+    current_row += 1
+    ws.cell(row=current_row, column=1, value='Official Publication: Petroleum Institute of Thailand (PTIT Focus Statistics)').font = font_notes
+
+    ws.column_dimensions['A'].width = 44
+    for c_letter in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+        ws.column_dimensions[c_letter].width = 15
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+def export_12month_matrix_excel(year_val, df_matrix, metric_name, unit_label, theme="imperial"):
+    """สร้างไฟล์ Excel ตารางเมทริกซ์ 12 เดือน (Jan - Dec) พร้อมค่าเฉลี่ยและยอดสะสมทั้งปี"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    clean_title = re.sub(r'[\\/*?:\[\]]', '_', str(metric_name))[:28]
+    ws.title = clean_title
+    ws.views.sheetView[0].showGridLines = True
+
+    theme_palettes = {
+        'imperial': {'hdr_bg': '24180E', 'hdr_fg': 'FFFFFF', 'sec_bg': '7A5328', 'sec_fg': 'FFFFFF', 'total_bg': 'EFE5D5', 'total_fg': '1C1917', 'zebra_bg': 'FAF7F2'},
+        'navy': {'hdr_bg': '0F172A', 'hdr_fg': 'FFFFFF', 'sec_bg': '1E3A8A', 'sec_fg': 'FFFFFF', 'total_bg': 'EFF6FF', 'total_fg': '0F172A', 'zebra_bg': 'F8FAFC'},
+        'emerald': {'hdr_bg': '0F281E', 'hdr_fg': 'FFFFFF', 'sec_bg': '047857', 'sec_fg': 'FFFFFF', 'total_bg': 'ECFDF5', 'total_fg': '064E3B', 'zebra_bg': 'F0FDF4'}
+    }
+    t = theme_palettes.get(theme, theme_palettes['imperial'])
+
+    ws.merge_cells('A1:O1')
+    ws['A1'].value = "PETROLEUM INSTITUTE OF THAILAND"
+    ws['A1'].font = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+    ws['A1'].fill = PatternFill(start_color=t['hdr_bg'], end_color=t['hdr_bg'], fill_type="solid")
+    ws['A1'].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 24
+
+    ws.merge_cells('A2:O2')
+    ws['A2'].value = f"12-MONTH DOMESTIC PETROLEUM PRODUCTION MATRIX ({year_val}) - {metric_name}"
+    ws['A2'].font = Font(name="Calibri", size=10.5, bold=True, color="FFFFFF")
+    ws['A2'].fill = PatternFill(start_color=t['sec_bg'], end_color=t['sec_bg'], fill_type="solid")
+    ws['A2'].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    ws.merge_cells('A3:O3')
+    ws['A3'].value = f"Primary Rate Unit: {unit_label}"
+    ws['A3'].font = Font(name="Calibri", size=9.5, italic=True, color="475569")
+    ws['A3'].alignment = Alignment(horizontal="center", vertical="center")
+
+    headers = ['Operator / Field', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.', 'เฉลี่ยทั้งปี', 'สะสมทั้งปี']
+    for col_idx, h_text in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col_idx, value=h_text)
+        cell.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color=t['hdr_bg'], end_color=t['hdr_bg'], fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = Border(left=Side(style='thin', color='CBD5E1'), right=Side(style='thin', color='CBD5E1'), top=Side(style='thin', color='CBD5E1'), bottom=Side(style='thin', color='CBD5E1'))
+    ws.row_dimensions[4].height = 22
+
+    cur_r = 5
+    for idx, r_data in df_matrix.iterrows():
+        name_str = str(r_data.get('Operator_Field', ''))
+        is_sub = 'Subtotal' in name_str or 'รวม' in name_str
+        is_grand = 'GRAND' in name_str.upper() or 'ยอดรวมทั้งประเทศ' in name_str
+        fill = PatternFill(start_color=t['total_bg'], end_color=t['total_bg'], fill_type="solid") if (is_sub or is_grand) else (PatternFill(start_color=t['zebra_bg'], end_color=t['zebra_bg'], fill_type="solid") if (idx % 2 == 1) else PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid"))
+        font = Font(name="Calibri", size=10, bold=(is_sub or is_grand))
+
+        for col_idx, h_text in enumerate(headers, 1):
+            val = r_data.get(h_text, None)
+            cell = ws.cell(row=cur_r, column=col_idx)
+            cell.font = font
+            cell.fill = fill
+            cell.border = Border(left=Side(style='thin', color='E2E8F0'), right=Side(style='thin', color='E2E8F0'), top=Side(style='thin', color='E2E8F0'), bottom=Side(style='thin', color='E2E8F0'))
+            if col_idx == 1:
+                cell.value = str(val) if val is not None else ""
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+            else:
+                if isinstance(val, (int, float)) and val > 0.0001:
+                    cell.value = float(val)
+                    cell.number_format = '#,##0.0' if 'MMSCF' in unit_label or 'BCF' in str(h_text) else '#,##0'
+                else:
+                    cell.value = "-"
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+        cur_r += 1
+
+    ws.column_dimensions['A'].width = 38
+    for c_idx in range(2, 16):
+        col_letter = openpyxl.utils.get_column_letter(c_idx)
+        ws.column_dimensions[col_letter].width = 13
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+def export_custom_pivot_excel(df_pivot, title="Custom_Pivot_Analysis"):
+    """ส่งออกตาราง Pivot Table ที่ User ปรับแต่งเองเป็น Excel สะอาดตา"""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as wr:
+        df_pivot.to_excel(wr, sheet_name='Pivot_Summary')
+        ws = wr.sheets['Pivot_Summary']
+        ws.views.sheetView[0].showGridLines = True
+        hdr_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+        hdr_font = Font(name="Calibri", size=10.5, bold=True, color="FFFFFF")
+        for col in ws.iter_cols(min_row=1, max_row=1):
+            for cell in col:
+                cell.fill = hdr_fill
+                cell.font = hdr_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+    buf.seek(0)
+    return buf
+
+# ----------------------------------------------------
 # DMF Live Stream Helpers & Data Processors
 # ----------------------------------------------------
 @st.cache_data(ttl=120)
@@ -2813,552 +3179,352 @@ with tab_charts:
         else:
             st.info("💡 ขณะนี้ยังไม่มีข้อมูลการผลิตในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อรัน Auto Sync ข้อมูลล่าสุดครับ")
 
-# ====================================================
-# TAB 4: PTIT DOMESTIC PRODUCTION REPORT
-# ====================================================
-with tab_ptit_report:
-    st.subheader("📑 รายงานปริมาณการผลิตปิโตรเลียมในประเทศ (PTIT Domestic Production Report)")
-    st.caption("ตารางรายงานสรุปรายเดือนตามมาตรฐานของ สถาบันปิโตรเลียมแห่งประเทศไทย (PTIT Focus Statistics)")
 
-    if 'df_flat_wide' in st.session_state:
-        df_all_data = st.session_state['df_flat_wide']
+import os, sys, json, io, re
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
 
-        # Month Selector
-        if 'ลำดับเดือน' not in df_all_data.columns:
-            df_all_data['ลำดับเดือน'] = df_all_data['เดือน'].map(MONTH_ORDER).fillna(99)
+# Theme Design Tokens for Annual Letterhead Table
+ANNUAL_THEME_TOKENS = {
+    'imperial': {
+        'card_bg': '#FFFFFF',
+        'card_border': 'rgba(197, 160, 89, 0.45)',
+        'card_shadow': '0 20px 48px -12px rgba(44, 30, 18, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+        'masthead_bg': 'linear-gradient(135deg, #1C1917 0%, #2A2118 60%, #38271A 100%)',
+        'masthead_accent': '#C5A059',
+        'masthead_org': '#D4AF37',
+        'badge_bg': 'rgba(212, 175, 55, 0.18)',
+        'badge_fg': '#E5C378',
+        'badge_border': 'rgba(212, 175, 55, 0.4)',
+        'th_main_bg': 'linear-gradient(135deg, #24180E 0%, #332216 100%)',
+        'th_sub_bg': '#2E2218',
+        'th_sub_color': '#FAF6F0',
+        'unit_chip_bg': 'rgba(197, 160, 89, 0.22)',
+        'unit_chip_color': '#F5D899',
+        'unit_chip_border': 'rgba(197, 160, 89, 0.45)',
+        'sec_bg': 'linear-gradient(90deg, #784E20 0%, #966734 50%, #7D5325 100%)',
+        'sec_color': '#FFFFFF',
+        'sec_badge_bg': 'rgba(0, 0, 0, 0.2)',
+        'sec_badge_color': '#FFFFFF',
+        'zebra_bg': '#FAF7F2',
+        'hover_bg': '#F5EFE6',
+        'hover_border': '#C5A059',
+        'tot_bg': 'linear-gradient(90deg, #EFE5D5 0%, #E3D3BE 100%)',
+        'tot_color': '#1C1917',
+        'tot_border_top': '#784E20',
+        'tot_border_bot': '#3D240E',
+        'grid_border': '#E8E2D8'
+    },
+    'navy': {
+        'card_bg': '#FFFFFF',
+        'card_border': 'rgba(30, 58, 138, 0.35)',
+        'card_shadow': '0 20px 48px -12px rgba(15, 23, 42, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+        'masthead_bg': 'linear-gradient(135deg, #0A1128 0%, #0F172A 60%, #1E293B 100%)',
+        'masthead_accent': '#38BDF8',
+        'masthead_org': '#93C5FD',
+        'badge_bg': 'rgba(56, 189, 248, 0.18)',
+        'badge_fg': '#38BDF8',
+        'badge_border': 'rgba(56, 189, 248, 0.4)',
+        'th_main_bg': 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+        'th_sub_bg': '#162038',
+        'th_sub_color': '#F1F5F9',
+        'unit_chip_bg': 'rgba(56, 189, 248, 0.18)',
+        'unit_chip_color': '#38BDF8',
+        'unit_chip_border': 'rgba(56, 189, 248, 0.4)',
+        'sec_bg': 'linear-gradient(90deg, #1E3A8A 0%, #2563EB 50%, #1E40AF 100%)',
+        'sec_color': '#FFFFFF',
+        'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+        'sec_badge_color': '#FFFFFF',
+        'zebra_bg': '#F8FAFC',
+        'hover_bg': '#EFF6FF',
+        'hover_border': '#38BDF8',
+        'tot_bg': 'linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 100%)',
+        'tot_color': '#0F172A',
+        'tot_border_top': '#1E3A8A',
+        'tot_border_bot': '#0F172A',
+        'grid_border': '#E2E8F0'
+    },
+    'emerald': {
+        'card_bg': '#FFFFFF',
+        'card_border': 'rgba(4, 120, 87, 0.35)',
+        'card_shadow': '0 20px 48px -12px rgba(6, 78, 59, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+        'masthead_bg': 'linear-gradient(135deg, #091310 0%, #0F201B 60%, #162F27 100%)',
+        'masthead_accent': '#10B981',
+        'masthead_org': '#6EE7B7',
+        'badge_bg': 'rgba(16, 185, 129, 0.18)',
+        'badge_fg': '#34D399',
+        'badge_border': 'rgba(16, 185, 129, 0.4)',
+        'th_main_bg': 'linear-gradient(135deg, #0F281E 0%, #132620 100%)',
+        'th_sub_bg': '#132620',
+        'th_sub_color': '#ECFDF5',
+        'unit_chip_bg': 'rgba(16, 185, 129, 0.18)',
+        'unit_chip_color': '#34D399',
+        'unit_chip_border': 'rgba(16, 185, 129, 0.4)',
+        'sec_bg': 'linear-gradient(90deg, #065F46 0%, #047857 50%, #064E3B 100%)',
+        'sec_color': '#FFFFFF',
+        'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+        'sec_badge_color': '#FFFFFF',
+        'zebra_bg': '#F0FDF4',
+        'hover_bg': '#ECFDF5',
+        'hover_border': '#10B981',
+        'tot_bg': 'linear-gradient(90deg, #ECFDF5 0%, #D1FAE5 100%)',
+        'tot_color': '#064E3B',
+        'tot_border_top': '#065F46',
+        'tot_border_bot': '#064E3B',
+        'grid_border': '#D1FAE5'
+    }
+}
 
-        avail_months = df_all_data[['ปี', 'เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')
-        month_options = [f"{r['เดือน']} ปี {r['ปี']}" for _, r in avail_months.iterrows()]
-
-        # Month, Fang Input, Luxury Theme, and Filter Selector
-        sel_col1, sel_col2, sel_col3, sel_col4 = st.columns([1.4, 1.8, 1.6, 1.1])
-        with sel_col1:
-            selected_month_label = st.selectbox("📅 เลือกเดือนรายงาน:", month_options, index=len(month_options)-1)
-
-        # Parse selected month and year
-        sel_month = selected_month_label.split()[0]
-        sel_year = selected_month_label.split()[-1]
-
-        # Ensure PTIT columns exist (Self-healing from Master)
-        if 'PTIT_Region' not in df_all_data.columns:
-            if 'Lookup_Key' not in df_all_data.columns and 'แปลง_ไฟล์ดิบ' in df_all_data.columns:
-                df_all_data['Lookup_Key'] = df_all_data['พื้นที่'].astype(str) + '_' + df_all_data['แปลง_ไฟล์ดิบ'].astype(str) + '_' + df_all_data['แหล่ง_ไฟล์ดิบ'].astype(str)
-            df_m = load_master_mapping()
-            cols_to_add = [c for c in ['Lookup_Key', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'] if c in df_m.columns]
-            if 'Lookup_Key' in df_all_data.columns:
-                df_all_data = pd.merge(df_all_data, df_m[cols_to_add], on='Lookup_Key', how='left')
-                st.session_state['df_flat_wide'] = df_all_data
-
-        # Filter data for chosen month
-        df_month_data = df_all_data[(df_all_data['เดือน'] == sel_month) & (df_all_data['ปี'].astype(str) == sel_year)].copy()
-
-        # DEDP Fang Value Retrieval & Role-based UI
-        saved_fang_val = get_fang_value(sel_year, sel_month)
-
-        with sel_col2:
-            if is_admin:
-                cf_in, cf_save = st.columns([2.2, 1.2])
-                with cf_in:
-                    fang_val = st.number_input(
-                        f"🛢️ ค่าน้ำมันดิบ แหล่งฝาง ({sel_month}) [BPD]:",
-                        min_value=0.0,
-                        value=float(saved_fang_val),
-                        step=10.0,
-                        key=f"input_fang_{sel_month}_{sel_year}",
-                        help="ข้อมูลแหล่งฝางสังกัดกรมการพลังงานทหาร (DEDP) ผู้ดูแลระบบสามารถกรอกและกดบันทึกได้ทันที"
-                    )
-                with cf_save:
-                    st.write("")
-                    st.write("")
-                    if st.button("💾 บันทึก", key=f"btn_save_fang_single_{sel_month}_{sel_year}", help="บันทึกค่าน้ำมันดิบแหล่งฝางสำหรับเดือนนี้"):
-                        set_fang_value(sel_year, sel_month, fang_val)
-                        if 'df_flat_wide' in st.session_state:
-                            st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
-                        st.toast(f"✅ บันทึกค่าน้ำมันดิบแหล่งฝาง ({sel_month} {sel_year}): {fang_val:,.1f} BPD เรียบร้อยแล้ว")
-                        st.rerun()
-            else:
-                fang_val = saved_fang_val
-                if fang_val > 0:
-                    st.markdown(f"""
-                    <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
-                        <span style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase;">🛢️ แหล่งฝาง (DEDP):</span>
-                        <span style="font-size: 15px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin-left: 6px;">{fang_val:,.1f} BPD</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div style="background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
-                        <span style="font-size: 11px; font-weight: 600; color: #64748B;">🛢️ แหล่งฝาง (DEDP):</span>
-                        <span style="font-size: 13px; font-weight: 600; color: #94A3B8; margin-left: 6px;">0.0 BPD (ไม่มีการผลิต / รอรายงาน)</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        with sel_col3:
-            selected_theme_label = st.selectbox(
-                "🎨 สไตล์เทมเพลต (Luxury Theme):",
-                [
-                    "👑 Imperial Bronze & Champagne Gold (Signature Luxury)",
-                    "💎 Royal Navy & Platinum (Sovereign Executive)",
-                    "🏛️ Obsidian Platinum & Emerald (Energy Terminal)"
-                ],
-                index=0
-            )
-            if "Royal Navy" in selected_theme_label:
-                report_theme_key = "navy"
-            elif "Emerald" in selected_theme_label:
-                report_theme_key = "emerald"
-            else:
-                report_theme_key = "imperial"
-
-        with sel_col4:
-            st.write("")
-            st.write("")
-            show_zero_fields = st.checkbox("แสดงแหล่งยอด 0", value=False, help="หากติ๊กเลือก จะแสดงแหล่งที่ไม่มีการผลิตในเดือนนั้น เช่น PTTEPI / G8/50")
-
-        # Group and Aggregate by PTIT Operator / Field
-        # Group keys: PTIT_Region, PTIT_Operator_Field, PTIT_Order
-        df_agg = df_month_data.groupby(['PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'], as_index=False).agg({
-            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'sum',
-            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'sum',
-            'น้ำมันดิบ (บาร์เรล/วัน)': 'sum'
-        }).rename(columns={
-            'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'Gas',
-            'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'Cond',
-            'น้ำมันดิบ (บาร์เรล/วัน)': 'Crude',
-            'PTIT_Region': 'Region',
-            'PTIT_Operator_Field': 'Operator_Field',
-            'PTIT_Order': 'Order'
-        })
-
-        # Append or update Fang in df_agg
-        has_fang_row = ('Operator_Field' in df_agg.columns and (df_agg['Operator_Field'] == 'Defence Energy Department / Fang').any())
-        if fang_val > 0:
-            if not has_fang_row:
-                df_fang_row = pd.DataFrame([{
-                    'Region': 'Onshore',
-                    'Operator_Field': 'Defence Energy Department / Fang',
-                    'Order': 13,
-                    'Gas': 0.0,
-                    'Cond': 0.0,
-                    'Crude': float(fang_val)
-                }])
-                df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
-            else:
-                df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = float(fang_val)
+def render_ptit_annual_report(df_all_data, is_admin=False):
+    """ฟังก์ชันแสดงผลรายงานการผลิตประจำปี (Annual Production Report) และเครื่องมือสร้าง Pivot Table ตามมาตรฐาน PTIT"""
+    # 1. Selection & Configuration Bar
+    avail_years = sorted(df_all_data['ปี'].astype(str).unique(), reverse=True)
+    
+    sel_col1, sel_col2, sel_col3 = st.columns([1.5, 2.2, 1.3])
+    with sel_col1:
+        sel_year = st.selectbox("📅 เลือกปีรายงาน (Reporting Year):", avail_years, index=0, key="annual_sel_year")
+    with sel_col2:
+        selected_theme_label = st.selectbox(
+            "🎨 สไตล์เทมเพลต (Luxury Theme):",
+            [
+                "👑 Imperial Bronze & Champagne Gold (Signature Luxury)",
+                "💎 Royal Navy & Platinum (Sovereign Executive)",
+                "🏛️ Obsidian Platinum & Emerald (Energy Terminal)"
+            ],
+            index=0,
+            key="annual_theme_sel"
+        )
+        if "Royal Navy" in selected_theme_label:
+            report_theme_key = "navy"
+        elif "Emerald" in selected_theme_label:
+            report_theme_key = "emerald"
         else:
-            if has_fang_row:
-                df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = 0.0
-            elif show_zero_fields:
-                df_fang_row = pd.DataFrame([{
+            report_theme_key = "imperial"
+    with sel_col3:
+        st.write("")
+        st.write("")
+        show_zero_fields = st.checkbox("แสดงแหล่งยอด 0", value=False, key="annual_show_zero", help="หากเลือก จะแสดงทุกแหล่งสัมปทานแม้ว่าทั้งปีจะไม่มีปริมาณการผลิต")
+
+    # Filter year data
+    df_year_data = df_all_data[df_all_data['ปี'].astype(str) == sel_year].copy()
+    if 'ลำดับเดือน' not in df_year_data.columns:
+        df_year_data['ลำดับเดือน'] = df_year_data['เดือน'].map(MONTH_ORDER).fillna(99)
+
+    avail_months_df = df_year_data[['เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')
+    active_months = avail_months_df['เดือน'].tolist()
+    total_active_days = sum(get_days_in_month(m, sel_year) for m in active_months)
+    is_full_year = (len(active_months) == 12)
+
+    # Self-healing Master Mapping lookup for fields
+    if 'PTIT_Region' not in df_year_data.columns:
+        if 'Lookup_Key' not in df_year_data.columns and 'แปลง_ไฟล์ดิบ' in df_year_data.columns:
+            df_year_data['Lookup_Key'] = df_year_data['พื้นที่'].astype(str) + '_' + df_year_data['แปลง_ไฟล์ดิบ'].astype(str) + '_' + df_year_data['แหล่ง_ไฟล์ดิบ'].astype(str)
+        df_m = load_master_mapping()
+        cols_to_add = [c for c in ['Lookup_Key', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'] if c in df_m.columns]
+        if 'Lookup_Key' in df_year_data.columns:
+            df_year_data = pd.merge(df_year_data, df_m[cols_to_add], on='Lookup_Key', how='left')
+
+    # Status & YTD Indicator Banner
+    period_status_html = f"""
+    <div style="background: rgba(248, 250, 252, 0.95); border: 1px solid #CBD5E1; border-radius: 12px; padding: 10px 16px; margin: 12px 0 18px 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">{'🟢' if is_full_year else '🟡'}</span>
+            <div>
+                <span style="font-size: 13px; font-weight: 700; color: #0F172A;">สถานะรอบรายงานประจำปี {sel_year}:</span>
+                <span style="font-size: 12.5px; color: #334155; margin-left: 6px;">
+                    {'ข้อมูลครบถ้วนเต็มปี (12 เดือน / 365 วัน)' if is_full_year else f'ข้อมูลสะสมระหว่างปี (YTD {len(active_months)} เดือน: {active_months[0]} – {active_months[-1]} {sel_year} | รวม {total_active_days} วันทำการผลิตสะสม)'}
+                </span>
+            </div>
+        </div>
+        <div>
+            <span style="background: {'rgba(16, 185, 129, 0.15)' if is_full_year else 'rgba(245, 158, 11, 0.15)'}; color: {'#065F46' if is_full_year else '#92400E'}; border: 1px solid {'rgba(16, 185, 129, 0.35)' if is_full_year else 'rgba(245, 158, 11, 0.35)'}; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                {'Full Year Official' if is_full_year else 'YTD Verified Telemetry'}
+            </span>
+        </div>
+    </div>
+    """
+    st.markdown(period_status_html, unsafe_allow_html=True)
+
+    # 3 Sub-tabs
+    ann_subtab1, ann_subtab2, ann_subtab3 = st.tabs([
+        "📑 1. สรุปภาพรวมรายแหล่งทั้งปี (Annual Field Summary)",
+        "📅 2. ตารางกระจาย 12 เดือน (12-Month Matrix)",
+        "🎛️ 3. เครื่องมือจัดตารางกำหนดเอง (Dynamic Pivot Table Builder)"
+    ])
+
+    # ----------------------------------------------------
+    # SUBTAB 1: ANNUAL FIELD SUMMARY
+    # ----------------------------------------------------
+    with ann_subtab1:
+        # Calculate monthly production volumes
+        df_year_data['Month_Days'] = df_year_data['เดือน'].apply(lambda m: get_days_in_month(m, sel_year))
+        df_year_data['Gas_MMSCF'] = df_year_data['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)'] * df_year_data['Month_Days']
+        df_year_data['Cond_Bbl'] = df_year_data['ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)'] * df_year_data['Month_Days']
+        df_year_data['Crude_Bbl'] = df_year_data['น้ำมันดิบ (บาร์เรล/วัน)'] * df_year_data['Month_Days']
+        df_year_data['BOED_Bbl'] = df_year_data['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'] * df_year_data['Month_Days']
+
+        df_agg = df_year_data.groupby(['PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'], as_index=False).agg({
+            'Gas_MMSCF': 'sum',
+            'Cond_Bbl': 'sum',
+            'Crude_Bbl': 'sum',
+            'BOED_Bbl': 'sum'
+        }).rename(columns={'PTIT_Region': 'Region', 'PTIT_Operator_Field': 'Operator_Field', 'PTIT_Order': 'Order'})
+
+        # Daily weighted averages and Cumulative volumes
+        df_agg['Gas_Avg'] = df_agg['Gas_MMSCF'] / total_active_days if total_active_days > 0 else 0.0
+        df_agg['Gas_Cum'] = df_agg['Gas_MMSCF'] / 1000.0  # BCF
+        df_agg['Cond_Avg'] = df_agg['Cond_Bbl'] / total_active_days if total_active_days > 0 else 0.0
+        df_agg['Cond_Cum'] = df_agg['Cond_Bbl'] / 1_000_000.0  # MMbbl
+        df_agg['Crude_Avg'] = df_agg['Crude_Bbl'] / total_active_days if total_active_days > 0 else 0.0
+        df_agg['Crude_Cum'] = df_agg['Crude_Bbl'] / 1_000_000.0  # MMbbl
+        df_agg['BOED_Avg'] = df_agg['BOED_Bbl'] / total_active_days if total_active_days > 0 else 0.0
+        df_agg['BOED_Cum'] = df_agg['BOED_Bbl'] / 1_000_000.0  # MMBOE
+
+        # DEDP Fang Crude Oil Integration
+        fang_cum_bbl = sum(get_fang_value(sel_year, m) * get_days_in_month(m, sel_year) for m in active_months)
+        fang_avg_bpd = fang_cum_bbl / total_active_days if total_active_days > 0 else 0.0
+
+        fang_idx = df_agg[df_agg['Operator_Field'] == 'Defence Energy Department / Fang'].index
+        if len(fang_idx) > 0:
+            df_agg.loc[fang_idx, 'Crude_Avg'] = fang_avg_bpd
+            df_agg.loc[fang_idx, 'Crude_Cum'] = fang_cum_bbl / 1_000_000.0
+            df_agg.loc[fang_idx, 'BOED_Avg'] = fang_avg_bpd
+            df_agg.loc[fang_idx, 'BOED_Cum'] = fang_cum_bbl / 1_000_000.0
+        else:
+            if fang_cum_bbl > 0 or show_zero_fields:
+                df_fang = pd.DataFrame([{
                     'Region': 'Onshore',
                     'Operator_Field': 'Defence Energy Department / Fang',
                     'Order': 13,
-                    'Gas': 0.0,
-                    'Cond': 0.0,
-                    'Crude': 0.0
+                    'Gas_MMSCF': 0.0, 'Cond_Bbl': 0.0, 'Crude_Bbl': fang_cum_bbl, 'BOED_Bbl': fang_cum_bbl,
+                    'Gas_Avg': 0.0, 'Gas_Cum': 0.0, 'Cond_Avg': 0.0, 'Cond_Cum': 0.0,
+                    'Crude_Avg': fang_avg_bpd, 'Crude_Cum': fang_cum_bbl / 1_000_000.0,
+                    'BOED_Avg': fang_avg_bpd, 'BOED_Cum': fang_cum_bbl / 1_000_000.0
                 }])
-                df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+                df_agg = pd.concat([df_agg, df_fang], ignore_index=True)
 
+        # Filter out zeroes if requested
         if not show_zero_fields:
-            df_agg = df_agg[(df_agg['Gas'] >= 0.001) | (df_agg['Cond'] >= 0.001) | (df_agg['Crude'] >= 0.001)].reset_index(drop=True)
+            df_agg = df_agg[(df_agg['BOED_Avg'] >= 0.05) | (df_agg['Gas_Avg'] >= 0.05) | (df_agg['Cond_Avg'] >= 0.05) | (df_agg['Crude_Avg'] >= 0.05)].reset_index(drop=True)
 
-        df_agg = df_agg.sort_values('Order').reset_index(drop=True)
+        df_agg = df_agg.sort_values(['Region', 'Order']).reset_index(drop=True)
 
-        # Calculate Subtotals
+        # Total Cumulative BOED for % Share
+        tot_boed_cum = df_agg['BOED_Cum'].sum()
+        df_agg['Share_Pct'] = (df_agg['BOED_Cum'] / tot_boed_cum * 100.0).fillna(0.0) if tot_boed_cum > 0 else 0.0
+
+        # Subtotals
         onshore_items = df_agg[df_agg['Region'] == 'Onshore'].to_dict('records')
         offshore_items = df_agg[df_agg['Region'] == 'Offshore'].to_dict('records')
 
-        onshore_sub = (
-            sum(x['Gas'] for x in onshore_items),
-            sum(x['Cond'] for x in onshore_items),
-            sum(x['Crude'] for x in onshore_items)
-        )
-        offshore_sub = (
-            sum(x['Gas'] for x in offshore_items),
-            sum(x['Cond'] for x in offshore_items),
-            sum(x['Crude'] for x in offshore_items)
-        )
-        grand_total = (
-            onshore_sub[0] + offshore_sub[0],
-            onshore_sub[1] + offshore_sub[1],
-            onshore_sub[2] + offshore_sub[2]
-        )
-
-        total_gas = grand_total[0]
-        total_cond = grand_total[1]
-        total_crude = grand_total[2]
-        
-        # Calculate official BOED from DMF data if present, otherwise standard conversion
-        if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_month_data.columns:
-            total_boed = float(df_month_data['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum()) + float(fang_val if fang_val > 0 else 0)
-        else:
-            total_boed = (total_gas * 1000 / 5.615) + total_cond + total_crude
-
-        # ----------------------------------------------------
-        # Executive Bento Metric Ribbon (Key Production Highlights)
-        # ----------------------------------------------------
-        bento_themes = {
-            'imperial': {
-                'card_bg': '#FFFFFF',
-                'border': 'rgba(197, 160, 89, 0.45)',
-                'halo_border': '1.5px solid #C5A059',
-                'halo_shadow': '0 8px 24px rgba(197, 160, 89, 0.22)',
-                'tag_bg': 'rgba(197, 160, 89, 0.15)',
-                'tag_fg': '#8A6239',
-                'accent_num': '#1C1917',
-                'boed_bg': 'linear-gradient(135deg, #FFFDF9 0%, #FBF6EE 100%)'
-            },
-            'navy': {
-                'card_bg': '#FFFFFF',
-                'border': 'rgba(30, 58, 138, 0.35)',
-                'halo_border': '1.5px solid #38BDF8',
-                'halo_shadow': '0 8px 24px rgba(56, 189, 248, 0.22)',
-                'tag_bg': 'rgba(56, 189, 248, 0.15)',
-                'tag_fg': '#0284C7',
-                'accent_num': '#0F172A',
-                'boed_bg': 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)'
-            },
-            'emerald': {
-                'card_bg': '#FFFFFF',
-                'border': 'rgba(4, 120, 87, 0.35)',
-                'halo_border': '1.5px solid #10B981',
-                'halo_shadow': '0 8px 24px rgba(16, 185, 129, 0.22)',
-                'tag_bg': 'rgba(16, 185, 129, 0.15)',
-                'tag_fg': '#047857',
-                'accent_num': '#064E3B',
-                'boed_bg': 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
+        def calc_sub(items):
+            return {
+                'Gas_Avg': sum(x.get('Gas_Avg', 0.0) for x in items),
+                'Gas_Cum': sum(x.get('Gas_Cum', 0.0) for x in items),
+                'Cond_Avg': sum(x.get('Cond_Avg', 0.0) for x in items),
+                'Cond_Cum': sum(x.get('Cond_Cum', 0.0) for x in items),
+                'Crude_Avg': sum(x.get('Crude_Avg', 0.0) for x in items),
+                'Crude_Cum': sum(x.get('Crude_Cum', 0.0) for x in items),
+                'BOED_Avg': sum(x.get('BOED_Avg', 0.0) for x in items),
+                'BOED_Cum': sum(x.get('BOED_Cum', 0.0) for x in items),
+                'Share_Pct': sum(x.get('Share_Pct', 0.0) for x in items)
             }
-        }
-        bt = bento_themes[report_theme_key]
 
-        html_bento = f"""
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 15px 0 20px 0;">
-            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 11px; font-weight: 700; color: #0284C7; letter-spacing: 0.05em; text-transform: uppercase;">🔵 ก๊าซธรรมชาติ (Gas)</span>
-                    <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">MMSCFD</span>
-                </div>
-                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
-                    {total_gas:,.1f}
-                </div>
-                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
-                    Onshore: <b>{onshore_sub[0]:,.1f}</b> • Offshore: <b>{offshore_sub[0]:,.1f}</b>
-                </div>
-            </div>
-            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 11px; font-weight: 700; color: #D97706; letter-spacing: 0.05em; text-transform: uppercase;">🟠 ก๊าซธรรมชาติเหลว (Cond)</span>
-                    <span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
-                </div>
-                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
-                    {total_cond:,.1f}
-                </div>
-                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
-                    อ่าวไทย (Offshore Gulf of Thailand 100%)
-                </div>
-            </div>
-            <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">🛢️ น้ำมันดิบ (Crude Oil)</span>
-                    <span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
-                </div>
-                <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
-                    {total_crude:,.1f}
-                </div>
-                <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
-                    Onshore: <b>{onshore_sub[2]:,.1f}</b> • Offshore: <b>{offshore_sub[2]:,.1f}</b>
-                </div>
-            </div>
-            <div style="background: {bt['boed_bg']}; border: {bt['halo_border']}; border-radius: 14px; padding: 14px 18px; box-shadow: {bt['halo_shadow']};">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="font-size: 11px; font-weight: 800; color: {bt['tag_fg']}; letter-spacing: 0.06em; text-transform: uppercase;">⚡ รวมเทียบเท่าน้ำมันดิบ</span>
-                    <span style="background: {bt['tag_bg']}; color: {bt['tag_fg']}; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;">BOED</span>
-                </div>
-                <div style="font-size: 24px; font-weight: 900; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
-                    {total_boed:,.1f}
-                </div>
-                <div style="font-size: 11px; color: #78716C; margin-top: 5px;">
-                    รวมเทียบเท่าตามค่าความร้อนจริง (DMF Standard)
-                </div>
-            </div>
-        </div>
-        """
-        clean_bento = re.sub(r'<!--.*?-->', '', html_bento, flags=re.DOTALL)
-        clean_bento = "\n".join(line.strip() for line in clean_bento.splitlines() if line.strip())
-        if hasattr(st, 'html'):
-            st.html(clean_bento)
-        else:
-            st.markdown(clean_bento, unsafe_allow_html=True)
+        onshore_sub = calc_sub(onshore_items)
+        offshore_sub = calc_sub(offshore_items)
+        grand_tot = {k: onshore_sub[k] + offshore_sub[k] for k in onshore_sub}
 
-        # ----------------------------------------------------
-        # UI/UX Pro Max: Dual Export & Distribution Center
-        # ----------------------------------------------------
-        st.markdown("""
-        <div style="display: flex; align-items: center; gap: 8px; margin: 18px 0 12px 0;">
-            <span style="font-size: 16px;">📦</span>
-            <span style="font-weight: 800; font-size: 14.5px; color: #0F172A;">ศูนย์ดาวน์โหลดข้อมูลและรายงาน (Export & Distribution Center)</span>
-            <span style="background: rgba(2, 132, 199, 0.1); color: #0284C7; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 12px; margin-left: 4px;">
-                DUAL FORMAT
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        exp_c1, exp_c2 = st.columns(2, gap="medium")
-        with exp_c1:
+        # Bento Metric Ribbon (Annual Totals)
+        bk = ANNUAL_THEME_TOKENS[report_theme_key]
+        bento_cols = st.columns(4)
+        
+        with bento_cols[0]:
             st.markdown(f"""
-            <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
-                            📑 รายงานทางการ PTIT (Formatted Report)
-                        </span>
-                        <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
-                            EXECUTIVE READY
-                        </span>
-                    </div>
-                    <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
-                        จัดรูปแบบทางการสไตล์ PTIT Focus ประจำเดือน <b>{sel_month} {sel_year}</b> ในธีม <b>{selected_theme_label.split('(')[0].strip()}</b> พร้อมผลรวม Onshore / Offshore สำหรับเสนอผู้บริหารหรือพิมพ์รายงาน
-                    </div>
-                </div>
+            <div style="background: {bk['card_bg']}; border: 1px solid {bk['card_border']}; border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase; letter-spacing: 0.05em;">⛽ ก๊าซธรรมชาติ (Natural Gas)</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin: 4px 0;">{grand_tot['Gas_Avg']:,.1f} <span style="font-size: 12px; font-weight: 600; color: #64748B;">MMSCFD</span></div>
+                <div style="font-size: 11.5px; color: #475569;">สะสมทั้งปี: <b style="color: #0284C7; font-family: 'JetBrains Mono', monospace;">{grand_tot['Gas_Cum']:,.2f}</b> BCF</div>
             </div>
             """, unsafe_allow_html=True)
-            
-            excel_buf = export_ptit_styled_excel(
-                sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total, theme=report_theme_key
-            )
-            st.download_button(
-                label=f"📥 ดาวน์โหลดตารางรายงาน PTIT ({sel_month} {sel_year})",
-                data=excel_buf,
-                file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}_{report_theme_key}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                use_container_width=True,
-                key="btn_dl_ptit_official_report"
-            )
 
-        with exp_c2:
+        with bento_cols[1]:
             st.markdown(f"""
-            <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
-                            📊 ฐานข้อมูลดิบรวมทั้งปี (Flat Table Database)
-                        </span>
-                        <span style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
-                            POWER BI & PIVOT
-                        </span>
-                    </div>
-                    <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
-                        ฐานข้อมูล Flat Matrix รวมทั้งปี <b>{len(avail_months)} เดือน</b> ({len(df_all_data):,} แถว) โครงสร้าง 2D สะอาด ไม่มีเซลล์ผสาน เหมาะสำหรับวิเคราะห์ต่อด้วย Power BI, Tableau หรือ Excel Pivot
-                    </div>
-                </div>
+            <div style="background: {bk['card_bg']}; border: 1px solid {bk['card_border']}; border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; font-weight: 700; color: #D97706; text-transform: uppercase; letter-spacing: 0.05em;">💧 ก๊าซธรรมชาติเหลว (Condensate)</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin: 4px 0;">{grand_tot['Cond_Avg']:,.0f} <span style="font-size: 12px; font-weight: 600; color: #64748B;">BPD</span></div>
+                <div style="font-size: 11.5px; color: #475569;">สะสมทั้งปี: <b style="color: #D97706; font-family: 'JetBrains Mono', monospace;">{grand_tot['Cond_Cum']:,.2f}</b> MMbbl</div>
             </div>
             """, unsafe_allow_html=True)
-            
-            buf_flat = io.BytesIO()
-            with pd.ExcelWriter(buf_flat, engine='openpyxl') as wr_flat:
-                df_all_data.to_excel(wr_flat, sheet_name='Flat_Wide', index=False)
-                if 'df_flat_long' in st.session_state and not st.session_state['df_flat_long'].empty:
-                    st.session_state['df_flat_long'].to_excel(wr_flat, sheet_name='Flat_Long_Unpivoted', index=False)
-            buf_flat.seek(0)
-            st.download_button(
-                label=f"📊 ดาวน์โหลดฐานข้อมูล Flat Table รวมทั้งปี (.xlsx)",
-                data=buf_flat,
-                file_name=f"petroleum_production_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="secondary",
-                use_container_width=True,
-                key="btn_dl_flat_table_tab4"
-            )
 
-        st.markdown("""
-        <div style="margin: 10px 0 18px 0; padding: 9px 16px; background: rgba(248, 250, 252, 0.85); border: 1px dashed #CBD5E1; border-radius: 10px; font-size: 12px; color: #475569; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-                <span>✨</span>
-                <span><b>คำแนะนำการพิมพ์ / บันทึก PDF:</b> ตารางด้านล่างแสดงผลสไตล์ Executive Letterhead สามารถกด <kbd style="background: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Ctrl + P</kbd> บนคีย์บอร์ดเพื่อสั่งพิมพ์หรือบันทึกเป็น PDF ได้ทันที</span>
+        with bento_cols[2]:
+            st.markdown(f"""
+            <div style="background: {bk['card_bg']}; border: 1px solid {bk['card_border']}; border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;">🛢️ น้ำมันดิบ (Crude Oil - รวมฝาง)</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin: 4px 0;">{grand_tot['Crude_Avg']:,.0f} <span style="font-size: 12px; font-weight: 600; color: #64748B;">BPD</span></div>
+                <div style="font-size: 11.5px; color: #475569;">สะสมทั้งปี: <b style="color: #475569; font-family: 'JetBrains Mono', monospace;">{grand_tot['Crude_Cum']:,.2f}</b> MMbbl</div>
             </div>
-            <span style="font-size: 11px; color: #94A3B8;">PTIT Focus Statistics Hub</span>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-        # Units Reference and Verification Expander
-        with st.expander("📐 ตารางทบทวนและตรวจสอบหน่วยวัดปิโตรเลียม (Petroleum Units Audit Reference)", expanded=False):
+        with bento_cols[3]:
+            st.markdown(f"""
+            <div style="background: {bk['card_bg']}; border: 1.5px solid {bk['masthead_accent']}; border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+                <div style="font-size: 11px; font-weight: 700; color: #7C3AED; text-transform: uppercase; letter-spacing: 0.05em;">⚡ รวมเทียบเท่าน้ำมันดิบ (Total BOED)</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin: 4px 0;">{grand_tot['BOED_Avg']:,.0f} <span style="font-size: 12px; font-weight: 600; color: #64748B;">BOED</span></div>
+                <div style="font-size: 11.5px; color: #475569;">สะสมทั้งปี: <b style="color: #7C3AED; font-family: 'JetBrains Mono', monospace;">{grand_tot['BOED_Cum']:,.2f}</b> MMBOE</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+
+        # Context-Aware Download Row
+        dl_col1, dl_col2 = st.columns([2.5, 1.5])
+        with dl_col1:
             st.markdown("""
-            <div style="background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(203, 213, 225, 0.8); border-radius: 12px; padding: 14px; font-size: 13px; overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-family: 'Hanken Grotesk', sans-serif;">
-                    <thead>
-                        <tr style="background: #F8FAFC; border-bottom: 2px solid #CBD5E1; color: #0F172A; font-size: 12.5px;">
-                            <th style="padding: 8px 12px; text-align: left;">หมวดรายงาน</th>
-                            <th style="padding: 8px 12px; text-align: left;">ผลิตภัณฑ์</th>
-                            <th style="padding: 8px 12px; text-align: left;">หน่วยหลัก (Primary Unit)</th>
-                            <th style="padding: 8px 12px; text-align: left;">หน่วยเทียบเท่า / หน่วยราคา</th>
-                            <th style="padding: 8px 12px; text-align: left;">คำอธิบายและนิยามทางสถิติ</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr style="border-bottom: 1px solid #E2E8F0;">
-                            <td style="padding: 8px 12px; font-weight: 700; color: #0284C7;" rowspan="3">🏭 การผลิตปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Production Report)</span></td>
-                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (Natural Gas)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCFD</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
-                            <td style="padding: 8px 12px; color: #475569;">ล้านลูกบาศก์ฟุตต่อวัน (วัดทางกายภาพ) เทียบเท่าบาร์เรล/วันตามค่าความร้อนเฉพาะของแต่ละแหล่ง</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E2E8F0;">
-                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติเหลว</b> (Condensate)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
-                            <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (ไฮโดรคาร์บอนเหลวเบาที่แยกได้จากก๊าซธรรมชาติในอ่าวไทย)</td>
-                        </tr>
-                        <tr style="border-bottom: 2px solid #CBD5E1;">
-                            <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
-                            <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (รวมแหล่งสิริกิติ์, อ่าวไทย, และแหล่งฝาง กรมการพลังงานทหาร DEDP)</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E2E8F0;">
-                            <td style="padding: 8px 12px; font-weight: 700; color: #D97706;" rowspan="4">💰 การจำหน่ายปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Sales & Fiscal Report)</span></td>
-                            <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (2 รูปแบบ)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCF</span> (ปริมาตร)<br><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-top: 3px; display: inline-block;">MMBTU</span> (ความร้อน)</td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/MMBTU</b><br>(BTU/scf)</td>
-                            <td style="padding: 8px 12px; color: #475569;">ปริมาตรใช้วัดทางวิศวกรรม ส่วนความร้อนใช้คิดเงินตามสัญญา GSA และคิดราคาปากหลุม</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E2E8F0;">
-                            <td style="padding: 8px 12px;"><b>คอนเดนเสท</b> (Condensate)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
-                            <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #E2E8F0;">
-                            <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
-                            <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px 12px;"><b>ก๊าซปิโตรเลียมเหลว</b> (LPG)</td>
-                            <td style="padding: 8px 12px;"><span style="background: rgba(147, 51, 234, 0.12); color: #7E22CE; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">กิโลกรัม (kg)</span></td>
-                            <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/กิโลกรัม</b></td>
-                            <td style="padding: 8px 12px; color: #475569;">กิโลกรัมที่จำหน่ายจากแหล่งสิริกิติ์ และราคาเฉลี่ยต่อกิโลกรัม</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div style="padding: 7px 12px; background: rgba(248, 250, 252, 0.85); border: 1px dashed #CBD5E1; border-radius: 8px; font-size: 12px; color: #475569;">
+                ✨ <b>คำแนะนำ:</b> สามารถพิมพ์รายงานสรุปประจำปีสไตล์ Executive Letterhead ทางการได้ทันทีโดยกด <kbd style="background: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Ctrl + P</kbd>
             </div>
             """, unsafe_allow_html=True)
+        with dl_col2:
+            excel_annual_buf = export_annual_styled_excel(
+                sel_year, onshore_items, offshore_items,
+                onshore_sub, offshore_sub, grand_tot,
+                active_months, report_theme_key
+            )
+            st.download_button(
+                label=f"📥 ดาวน์โหลดรายงานประจำปี ({sel_year}.xlsx)",
+                data=excel_annual_buf.getvalue(),
+                file_name=f"PTIT_Annual_Production_Summary_{sel_year}_{report_theme_key}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"btn_dl_annual_summary_{sel_year}_{report_theme_key}"
+            )
 
-        # HTML Table Generator
-        def fmt(val, is_bpd=False):
+        # HTML Table Helper
+        def fmt_cell(val, decimals=1, is_int_comma=False):
             if val is None or val == 0:
                 return "&nbsp;"
-            if val < 0.05:
+            if val < 0.005:
                 return "0.0"
-            if is_bpd:
-                return f"{val:,.1f}"
-            return f"{val:.1f}"
+            if is_int_comma:
+                return f"{val:,.0f}"
+            return f"{val:,.{decimals}f}"
 
-        # Theme Design Tokens for Table
-        theme_table_tokens = {
-            'imperial': {
-                'card_bg': '#FFFFFF',
-                'card_border': 'rgba(197, 160, 89, 0.45)',
-                'card_shadow': '0 20px 48px -12px rgba(44, 30, 18, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
-                'masthead_bg': 'linear-gradient(135deg, #1C1917 0%, #2A2118 60%, #38271A 100%)',
-                'masthead_accent': '#C5A059',
-                'masthead_org': '#D4AF37',
-                'badge_bg': 'rgba(212, 175, 55, 0.18)',
-                'badge_fg': '#E5C378',
-                'badge_border': 'rgba(212, 175, 55, 0.4)',
-                'th_main_bg': 'linear-gradient(135deg, #24180E 0%, #332216 100%)',
-                'th_sub_bg': '#2E2218',
-                'th_sub_color': '#FAF6F0',
-                'unit_chip_bg': 'rgba(197, 160, 89, 0.22)',
-                'unit_chip_color': '#F5D899',
-                'unit_chip_border': 'rgba(197, 160, 89, 0.45)',
-                'sec_bg': 'linear-gradient(90deg, #784E20 0%, #966734 50%, #7D5325 100%)',
-                'sec_color': '#FFFFFF',
-                'sec_badge_bg': 'rgba(0, 0, 0, 0.2)',
-                'sec_badge_color': '#FFFFFF',
-                'zebra_bg': '#FAF7F2',
-                'hover_bg': '#F5EFE6',
-                'hover_border': '#C5A059',
-                'tot_bg': 'linear-gradient(90deg, #EFE5D5 0%, #E3D3BE 100%)',
-                'tot_color': '#1C1917',
-                'tot_border_top': '#784E20',
-                'tot_border_bot': '#3D240E',
-                'grid_border': '#E8E2D8'
-            },
-            'navy': {
-                'card_bg': '#FFFFFF',
-                'card_border': 'rgba(30, 58, 138, 0.35)',
-                'card_shadow': '0 20px 48px -12px rgba(15, 23, 42, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
-                'masthead_bg': 'linear-gradient(135deg, #0A1128 0%, #0F172A 60%, #1E293B 100%)',
-                'masthead_accent': '#38BDF8',
-                'masthead_org': '#93C5FD',
-                'badge_bg': 'rgba(56, 189, 248, 0.18)',
-                'badge_fg': '#38BDF8',
-                'badge_border': 'rgba(56, 189, 248, 0.4)',
-                'th_main_bg': 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-                'th_sub_bg': '#162038',
-                'th_sub_color': '#F1F5F9',
-                'unit_chip_bg': 'rgba(56, 189, 248, 0.18)',
-                'unit_chip_color': '#38BDF8',
-                'unit_chip_border': 'rgba(56, 189, 248, 0.4)',
-                'sec_bg': 'linear-gradient(90deg, #1E3A8A 0%, #2563EB 50%, #1E40AF 100%)',
-                'sec_color': '#FFFFFF',
-                'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
-                'sec_badge_color': '#FFFFFF',
-                'zebra_bg': '#F8FAFC',
-                'hover_bg': '#EFF6FF',
-                'hover_border': '#38BDF8',
-                'tot_bg': 'linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 100%)',
-                'tot_color': '#0F172A',
-                'tot_border_top': '#1E3A8A',
-                'tot_border_bot': '#0F172A',
-                'grid_border': '#E2E8F0'
-            },
-            'emerald': {
-                'card_bg': '#FFFFFF',
-                'card_border': 'rgba(4, 120, 87, 0.35)',
-                'card_shadow': '0 20px 48px -12px rgba(6, 78, 59, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
-                'masthead_bg': 'linear-gradient(135deg, #091310 0%, #0F201B 60%, #162F27 100%)',
-                'masthead_accent': '#10B981',
-                'masthead_org': '#6EE7B7',
-                'badge_bg': 'rgba(16, 185, 129, 0.18)',
-                'badge_fg': '#34D399',
-                'badge_border': 'rgba(16, 185, 129, 0.4)',
-                'th_main_bg': 'linear-gradient(135deg, #0F281E 0%, #132620 100%)',
-                'th_sub_bg': '#132620',
-                'th_sub_color': '#ECFDF5',
-                'unit_chip_bg': 'rgba(16, 185, 129, 0.18)',
-                'unit_chip_color': '#34D399',
-                'unit_chip_border': 'rgba(16, 185, 129, 0.4)',
-                'sec_bg': 'linear-gradient(90deg, #065F46 0%, #047857 50%, #064E3B 100%)',
-                'sec_color': '#FFFFFF',
-                'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
-                'sec_badge_color': '#FFFFFF',
-                'zebra_bg': '#F0FDF4',
-                'hover_bg': '#ECFDF5',
-                'hover_border': '#10B981',
-                'tot_bg': 'linear-gradient(90deg, #ECFDF5 0%, #D1FAE5 100%)',
-                'tot_color': '#064E3B',
-                'tot_border_top': '#065F46',
-                'tot_border_bot': '#064E3B',
-                'grid_border': '#D1FAE5'
-            }
-        }
-        tk = theme_table_tokens[report_theme_key]
-
-        html_table = f"""
+        # HTML Letterhead Table Rendering
+        tk = ANNUAL_THEME_TOKENS[report_theme_key]
+        html_annual = f"""
         <style>
-            .ptit-luxury-wrapper {{
+            .ann-luxury-wrapper {{
                 background: {tk['card_bg']};
                 border: 1px solid {tk['card_border']};
                 box-shadow: {tk['card_shadow']};
                 border-radius: 18px;
                 overflow: hidden;
-                margin-top: 20px;
+                margin-top: 14px;
                 font-family: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             }}
-            .ptit-masthead {{
+            .ann-masthead {{
                 background: {tk['masthead_bg']};
                 border-top: 4px solid {tk['masthead_accent']};
                 padding: 22px 28px;
@@ -3368,16 +3534,16 @@ with tab_ptit_report:
                 flex-wrap: wrap;
                 gap: 14px;
             }}
-            .ptit-masthead-org {{
+            .ann-masthead-org {{
                 font-family: 'Cinzel', 'Playfair Display', Georgia, serif;
-                font-size: 12px;
+                font-size: 12.5px;
                 font-weight: 700;
                 color: {tk['masthead_org']};
                 letter-spacing: 0.14em;
                 text-transform: uppercase;
                 margin-bottom: 4px;
             }}
-            .ptit-masthead-title {{
+            .ann-masthead-title {{
                 font-family: 'Manrope', 'Hanken Grotesk', sans-serif;
                 font-size: 21px;
                 font-weight: 800;
@@ -3385,19 +3551,13 @@ with tab_ptit_report:
                 letter-spacing: -0.015em;
                 line-height: 1.25;
             }}
-            .ptit-masthead-sub {{
+            .ann-masthead-sub {{
                 font-size: 13px;
                 color: #E2E8F0;
                 margin-top: 3px;
                 opacity: 0.92;
             }}
-            .ptit-masthead-badges {{
-                display: flex;
-                flex-direction: column;
-                align-items: flex-end;
-                gap: 6px;
-            }}
-            .ptit-badge {{
+            .ann-badge {{
                 font-size: 10px;
                 font-weight: 700;
                 padding: 4px 10px;
@@ -3405,254 +3565,1362 @@ with tab_ptit_report:
                 letter-spacing: 0.06em;
                 text-transform: uppercase;
                 display: inline-block;
-            }}
-            .ptit-badge-gold {{
                 background: {tk['badge_bg']};
                 color: {tk['badge_fg']};
                 border: 1px solid {tk['badge_border']};
             }}
-            .ptit-table-responsive {{
+            .ann-table-responsive {{
                 overflow-x: auto;
                 width: 100%;
             }}
-            .ptit-luxury-table {{
+            .ann-luxury-table {{
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 13.5px;
+                font-size: 12.5px;
                 color: #1E293B;
             }}
-            .ptit-luxury-table th, .ptit-luxury-table td {{
+            .ann-luxury-table th, .ann-luxury-table td {{
                 border: 1px solid {tk['grid_border']};
-                padding: 7px 14px;
-                line-height: 1.4;
+                padding: 6px 10px;
+                line-height: 1.35;
             }}
-            .th-main {{
+            .ann-th-main {{
                 background: {tk['th_main_bg']};
                 color: #FFFFFF;
                 text-align: center;
                 font-weight: 700;
-                font-size: 13.5px;
-                letter-spacing: 0.02em;
-                padding: 10px 14px !important;
+                font-size: 12.5px;
+                padding: 9px 10px !important;
             }}
-            .th-col {{
+            .ann-th-sub {{
                 background: {tk['th_sub_bg']};
                 color: {tk['th_sub_color']};
                 text-align: center;
                 font-weight: 700;
-                font-size: 13px;
-                padding: 9px 12px !important;
+                font-size: 11.5px;
+                padding: 7px 8px !important;
             }}
-            .unit-pill {{
-                display: inline-block;
-                background: {tk['unit_chip_bg']};
-                color: {tk['unit_chip_color']};
-                border: 1px solid {tk['unit_chip_border']};
-                font-size: 10.5px;
-                font-weight: 700;
-                padding: 1px 7px;
-                border-radius: 5px;
-                margin-top: 3px;
-            }}
-            .tr-section {{
+            .ann-tr-sec {{
                 background: {tk['sec_bg']};
                 color: {tk['sec_color']};
-                font-weight: 700;
-                font-size: 13.5px;
-            }}
-            .tr-section td {{
-                border-color: rgba(0, 0, 0, 0.15) !important;
-                padding: 8px 14px !important;
-            }}
-            .sec-badge {{
-                display: inline-block;
-                background: {tk['sec_badge_bg']};
-                color: {tk['sec_badge_color']};
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 0.03em;
-            }}
-            .tr-item-even {{
-                background: {tk['zebra_bg']};
-                transition: background-color 150ms ease, border-left 150ms ease;
-            }}
-            .tr-item-odd {{
-                background: #FFFFFF;
-                transition: background-color 150ms ease, border-left 150ms ease;
-            }}
-            .tr-item-even:hover, .tr-item-odd:hover {{
-                background: {tk['hover_bg']} !important;
-            }}
-            .tr-item-even:hover td:first-child, .tr-item-odd:hover td:first-child {{
-                border-left: 3px solid {tk['hover_border']} !important;
-                padding-left: 25px !important;
-            }}
-            .tr-total {{
-                background: {tk['tot_bg']};
-                color: {tk['tot_color']};
                 font-weight: 800;
-                border-top: 2px solid {tk['tot_border_top']} !important;
-                border-bottom: 3px double {tk['tot_border_bot']} !important;
-                font-size: 14px;
+                font-size: 12.5px;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
             }}
-            .tr-total td {{
-                padding: 11px 14px !important;
-                border-top: 2px solid {tk['tot_border_top']} !important;
-                border-bottom: 3px double {tk['tot_border_bot']} !important;
-            }}
-            .num-cell {{
+            .ann-tr-item-even {{ background: {tk['zebra_bg']}; }}
+            .ann-tr-item-odd {{ background: #FFFFFF; }}
+            .ann-num-cell {{
                 text-align: right;
-                font-family: 'JetBrains Mono', 'SF Mono', monospace;
-                font-size: 13px;
-                font-variant-numeric: tabular-nums;
-                letter-spacing: -0.01em;
+                font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+                font-size: 12px;
+                font-weight: 500;
             }}
-            .tot-num {{
-                font-size: 14.5px !important;
-                font-weight: 800 !important;
+            .ann-tr-subtotal {{
+                background: {tk['hover_bg']};
+                font-weight: 700;
+                color: #0F172A;
+                border-top: 1.5px solid {tk['card_border']};
+                border-bottom: 1.5px solid {tk['card_border']};
             }}
-            .ptit-footnote-box {{
-                background: #FAFAF9;
-                border-top: 1px solid {tk['grid_border']};
-                padding: 14px 24px;
-                font-size: 11.5px;
+            .ann-tr-total {{
+                background: {tk['tot_bg']};
+                font-weight: 800;
+                font-size: 13.5px;
+                color: {tk['tot_color']};
+                border-top: 2.5px solid {tk['tot_border_top']};
+                border-bottom: 3.5px double {tk['tot_border_bot']};
+            }}
+            .ann-footnote-box {{
+                background: #F8FAFC;
+                border-top: 1px solid {tk['card_border']};
+                padding: 12px 24px;
+                font-size: 11px;
                 color: #64748B;
                 display: flex;
-                justify-content: space-between;
                 flex-wrap: wrap;
-                gap: 10px;
-            }}
-            @media print {{
-                body * {{
-                    visibility: hidden !important;
-                }}
-                .ptit-luxury-wrapper, .ptit-luxury-wrapper * {{
-                    visibility: visible !important;
-                }}
-                .ptit-luxury-wrapper {{
-                    position: absolute !important;
-                    left: 0 !important;
-                    top: 0 !important;
-                    width: 100% !important;
-                    border: 1px solid #777 !important;
-                    box-shadow: none !important;
-                }}
+                justify-content: space-between;
+                gap: 12px;
             }}
         </style>
 
-        <div class="ptit-luxury-wrapper">
-            <div class="ptit-masthead">
+        <div class="ann-luxury-wrapper">
+            <div class="ann-masthead">
                 <div>
-                    <div class="ptit-masthead-org">PETROLEUM INSTITUTE OF THAILAND</div>
-                    <div class="ptit-masthead-title">DOMESTIC PETROLEUM PRODUCTION REPORT</div>
-                    <div class="ptit-masthead-sub">รายงานสถิติปริมาณการผลิตปิโตรเลียมในประเทศ ประจำเดือน {sel_month} {sel_year}</div>
+                    <div class="ann-masthead-org">PETROLEUM INSTITUTE OF THAILAND</div>
+                    <div class="ann-masthead-title">DOMESTIC PETROLEUM PRODUCTION ANNUAL REPORT ({sel_year})</div>
+                    <div class="ann-masthead-sub">Annual Production Summary & Cumulative Hydrocarbon Output ({'Full Year' if is_full_year else f'YTD {len(active_months)} Months: {active_months[0]} – {active_months[-1]} {sel_year} | {total_active_days} Operating Days'})</div>
                 </div>
-                <div class="ptit-masthead-badges">
-                    <span class="ptit-badge ptit-badge-gold">🔒 OFFICIAL AUDITED RECORD</span>
-                    <span class="ptit-badge ptit-badge-gold">📅 PTIT FOCUS RELEASE</span>
+                <div style="text-align: right;">
+                    <div class="ann-badge">PTIT FOCUS STATISTICS</div>
+                    <div style="font-size: 11px; color: #94A3B8; margin-top: 5px; font-family: 'JetBrains Mono', monospace;">OFFICIAL STATISTICAL RELEASE</div>
                 </div>
             </div>
 
-            <div class="ptit-table-responsive">
-                <table class="ptit-luxury-table">
+            <div class="ann-table-responsive">
+                <table class="ann-luxury-table">
                     <thead>
                         <tr>
-                            <th rowspan="2" class="th-main" style="width: 46%; text-align: left; padding-left: 20px !important;">
-                                Operator / Field <span style="font-size: 12px; font-weight: normal; opacity: 0.85;">({sel_month} {sel_year})</span>
-                            </th>
-                            <th colspan="3" class="th-main">
-                                Domestic Production
-                            </th>
+                            <th class="ann-th-main" rowspan="2" style="width: 26%; text-align: left; padding-left: 20px !important;">Field / Concession</th>
+                            <th class="ann-th-main" colspan="4">อัตราการผลิตเฉลี่ยต่อวัน (Daily Average Rate)</th>
+                            <th class="ann-th-main" colspan="4">ปริมาณการผลิตสะสมตลอดปี (Cumulative Annual Volume)</th>
+                            <th class="ann-th-main" rowspan="2" style="width: 7%;">สัดส่วน<br>(% Share)</th>
                         </tr>
                         <tr>
-                            <th class="th-col" style="width: 18%;">
-                                Natural Gas<br><span class="unit-pill">MMSCFD</span>
-                            </th>
-                            <th class="th-col" style="width: 18%;">
-                                Condensate<br><span class="unit-pill">BPD</span>
-                            </th>
-                            <th class="th-col" style="width: 18%;">
-                                Crude<br><span class="unit-pill">BPD</span>
-                            </th>
+                            <th class="ann-th-sub">ก๊าซธรรมชาติ<br><span style="font-size: 10px; opacity: 0.85;">(MMSCFD)</span></th>
+                            <th class="ann-th-sub">ก๊าซธรรมชาติเหลว<br><span style="font-size: 10px; opacity: 0.85;">(BPD)</span></th>
+                            <th class="ann-th-sub">น้ำมันดิบ<br><span style="font-size: 10px; opacity: 0.85;">(BPD)</span></th>
+                            <th class="ann-th-sub">รวมเทียบเท่า<br><span style="font-size: 10px; opacity: 0.85;">(BOED)</span></th>
+                            <th class="ann-th-sub">ก๊าซธรรมชาติ<br><span style="font-size: 10px; opacity: 0.85;">(BCF)</span></th>
+                            <th class="ann-th-sub">ก๊าซธรรมชาติเหลว<br><span style="font-size: 10px; opacity: 0.85;">(MMbbl)</span></th>
+                            <th class="ann-th-sub">น้ำมันดิบ<br><span style="font-size: 10px; opacity: 0.85;">(MMbbl)</span></th>
+                            <th class="ann-th-sub">รวมเทียบเท่า<br><span style="font-size: 10px; opacity: 0.85;">(MMBOE)</span></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr class="tr-section">
-                            <td style="padding-left: 18px !important;">
-                                <span class="sec-badge">🏞️ ONSHORE BASIN</span>
-                            </td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[0])}</td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[1], True)}</td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[2], True)}</td>
+                        <tr class="ann-tr-sec">
+                            <td colspan="10" style="padding-left: 20px;">ONSHORE BASIN</td>
                         </tr>
         """
 
         for idx, it in enumerate(onshore_items):
-            row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
-            html_table += f"""
+            row_cls = "ann-tr-item-even" if (idx % 2 == 1) else "ann-tr-item-odd"
+            html_annual += f"""
                         <tr class="{row_cls}">
-                            <td style="padding-left: 28px;">{it['Operator_Field']}</td>
-                            <td class="num-cell">{fmt(it['Gas'])}</td>
-                            <td class="num-cell">{fmt(it['Cond'], True)}</td>
-                            <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                            <td style="padding-left: 26px;">{it['Operator_Field']}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Gas_Avg'], 1)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Cond_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Crude_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell" style="font-weight: 700;">{fmt_cell(it['BOED_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Gas_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Cond_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Crude_Cum'], 2)}</td>
+                            <td class="ann-num-cell" style="font-weight: 700;">{fmt_cell(it['BOED_Cum'], 2)}</td>
+                            <td class="ann-num-cell" style="color: #64748B;">{it['Share_Pct']:.1f}%</td>
                         </tr>
             """
 
-        html_table += f"""
-                        <tr class="tr-section">
-                            <td style="padding-left: 18px !important;">
-                                <span class="sec-badge">🌊 OFFSHORE GULF OF THAILAND</span>
-                            </td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[0])}</td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[1], True)}</td>
-                            <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[2], True)}</td>
+        html_annual += f"""
+                        <tr class="ann-tr-subtotal">
+                            <td style="padding-left: 20px;">Total Onshore Basin</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Gas_Avg'], 1)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Cond_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Crude_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['BOED_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Gas_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Cond_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['Crude_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(onshore_sub['BOED_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{onshore_sub['Share_Pct']:.1f}%</td>
+                        </tr>
+                        <tr class="ann-tr-sec">
+                            <td colspan="10" style="padding-left: 20px;">OFFSHORE GULF OF THAILAND</td>
                         </tr>
         """
 
         for idx, it in enumerate(offshore_items):
-            row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
-            html_table += f"""
+            row_cls = "ann-tr-item-even" if (idx % 2 == 1) else "ann-tr-item-odd"
+            html_annual += f"""
                         <tr class="{row_cls}">
-                            <td style="padding-left: 28px;">{it['Operator_Field']}</td>
-                            <td class="num-cell">{fmt(it['Gas'])}</td>
-                            <td class="num-cell">{fmt(it['Cond'], True)}</td>
-                            <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                            <td style="padding-left: 26px;">{it['Operator_Field']}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Gas_Avg'], 1)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Cond_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Crude_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell" style="font-weight: 700;">{fmt_cell(it['BOED_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Gas_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Cond_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(it['Crude_Cum'], 2)}</td>
+                            <td class="ann-num-cell" style="font-weight: 700;">{fmt_cell(it['BOED_Cum'], 2)}</td>
+                            <td class="ann-num-cell" style="color: #64748B;">{it['Share_Pct']:.1f}%</td>
                         </tr>
             """
 
-        html_table += f"""
-                        <tr class="tr-total">
+        html_annual += f"""
+                        <tr class="ann-tr-subtotal">
+                            <td style="padding-left: 20px;">Total Offshore Gulf of Thailand</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Gas_Avg'], 1)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Cond_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Crude_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['BOED_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Gas_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Cond_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['Crude_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(offshore_sub['BOED_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{offshore_sub['Share_Pct']:.1f}%</td>
+                        </tr>
+                        <tr class="ann-tr-total">
                             <td style="text-align: center; font-family: 'Manrope', sans-serif;">Total Domestic Production</td>
-                            <td class="num-cell tot-num">{fmt(grand_total[0])}</td>
-                            <td class="num-cell tot-num">{fmt(grand_total[1], True)}</td>
-                            <td class="num-cell tot-num">{fmt(grand_total[2], True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Gas_Avg'], 1)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Cond_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Crude_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['BOED_Avg'], 0, True)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Gas_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Cond_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['Crude_Cum'], 2)}</td>
+                            <td class="ann-num-cell">{fmt_cell(grand_tot['BOED_Cum'], 2)}</td>
+                            <td class="ann-num-cell">100.0%</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
 
-            <div class="ptit-footnote-box">
+            <div class="ann-footnote-box">
                 <div>
-                    <div><b>Note:</b> &nbsp; Data shown as "0.0" indicates production figure less than 0.05.</div>
-                    <div style="margin-top: 3px;"><b>Source:</b> Department of Mineral Fuels (DMF), &nbsp;Defence Energy Department (DEDP)</div>
+                    <div><b>Note:</b> &nbsp; 1. Daily rates are weighted averages based on actual operating days in active reporting months ({total_active_days} days).</div>
+                    <div style="margin-top: 2px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2. Cumulative volumes: Natural Gas in BCF, Hydrocarbon Liquids in MMbbl, Total Energy Equivalent in MMBOE.</div>
+                    <div style="margin-top: 2px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3. Crude oil includes Sirikit, Offshore fields, and Defence Energy Department (DEDP Fang).</div>
+                    <div style="margin-top: 2px;"><b>Source:</b> Department of Mineral Fuels (DMF), Defence Energy Department (DEDP)</div>
                 </div>
                 <div style="text-align: right;">
                     <div><b>Official Publication:</b> Petroleum Institute of Thailand (PTIT Focus Statistics)</div>
-                    <div style="margin-top: 3px; color: #94A3B8;">Verified National Hydrocarbon Production Telemetry</div>
+                    <div style="margin-top: 2px; color: #94A3B8;">National Hydrocarbon Telemetry Data Hub</div>
                 </div>
             </div>
         </div>
         """
 
-        clean_html = re.sub(r'<!--.*?-->', '', html_table, flags=re.DOTALL)
-        clean_html = "\n".join(line.strip() for line in clean_html.splitlines() if line.strip())
+        clean_html_ann = re.sub(r'<!--.*?-->', '', html_annual, flags=re.DOTALL)
+        clean_html_ann = "\n".join(line.strip() for line in clean_html_ann.splitlines() if line.strip())
         if hasattr(st, 'html'):
-            st.html(clean_html)
+            st.html(clean_html_ann)
         else:
-            st.markdown(clean_html, unsafe_allow_html=True)
+            st.markdown(clean_html_ann, unsafe_allow_html=True)
 
+    # ----------------------------------------------------
+    # SUBTAB 2: 12-MONTH MATRIX
+    # ----------------------------------------------------
+    with ann_subtab2:
+        prod_opt = st.radio(
+            "เลือกผลิตภัณฑ์สำหรับแสดงตารางเมทริกซ์ 12 เดือน (Select Hydrocarbon Stream):",
+            [
+                "⚡ รวมเทียบเท่าน้ำมันดิบ (Total BOED)",
+                "⛽ ก๊าซธรรมชาติ (Natural Gas - MMSCFD)",
+                "💧 ก๊าซธรรมชาติเหลว (Condensate - BPD)",
+                "🛢️ น้ำมันดิบ (Crude Oil - BPD)"
+            ],
+            horizontal=True,
+            key="annual_matrix_prod_opt"
+        )
+
+        matrix_meta = {
+            "⚡ รวมเทียบเท่าน้ำมันดิบ (Total BOED)": {
+                'col': 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                'slug': 'BOED', 'unit_d': 'BOED', 'unit_c': 'MMBOE', 'divisor': 1_000_000.0, 'dec': 0
+            },
+            "⛽ ก๊าซธรรมชาติ (Natural Gas - MMSCFD)": {
+                'col': 'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)',
+                'slug': 'Gas', 'unit_d': 'MMSCFD', 'unit_c': 'BCF', 'divisor': 1000.0, 'dec': 1
+            },
+            "💧 ก๊าซธรรมชาติเหลว (Condensate - BPD)": {
+                'col': 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+                'slug': 'Cond', 'unit_d': 'BPD', 'unit_c': 'MMbbl', 'divisor': 1_000_000.0, 'dec': 0
+            },
+            "🛢️ น้ำมันดิบ (Crude Oil - BPD)": {
+                'col': 'น้ำมันดิบ (บาร์เรล/วัน)',
+                'slug': 'Crude', 'unit_d': 'BPD', 'unit_c': 'MMbbl', 'divisor': 1_000_000.0, 'dec': 0
+            }
+        }
+        meta = matrix_meta[prod_opt]
+
+        MONTH_NAMES = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+        MONTH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+
+        df_matrix_pivot = df_year_data.pivot_table(
+            index=['PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'],
+            columns='เดือน',
+            values=meta['col'],
+            aggfunc='sum'
+        ).fillna(0.0).reset_index()
+
+        # Handle Fang for Crude or BOED
+        if meta['slug'] in ['Crude', 'BOED']:
+            fang_piv_idx = df_matrix_pivot[df_matrix_pivot['PTIT_Operator_Field'] == 'Defence Energy Department / Fang'].index
+            if len(fang_piv_idx) == 0:
+                fang_dict = {'PTIT_Region': 'Onshore', 'PTIT_Operator_Field': 'Defence Energy Department / Fang', 'PTIT_Order': 13}
+                for m in MONTH_NAMES:
+                    fang_dict[m] = get_fang_value(sel_year, m) if m in active_months else 0.0
+                df_matrix_pivot = pd.concat([df_matrix_pivot, pd.DataFrame([fang_dict])], ignore_index=True)
+            else:
+                for m in MONTH_NAMES:
+                    df_matrix_pivot.loc[fang_piv_idx, m] = get_fang_value(sel_year, m) if m in active_months else 0.0
+
+        df_matrix_pivot = df_matrix_pivot.sort_values(['PTIT_Region', 'PTIT_Order']).reset_index(drop=True)
+
+        # Build clean export dataframe
+        rows_matrix_export = []
+        for _, r in df_matrix_pivot.iterrows():
+            f_name = r['PTIT_Operator_Field']
+            row_dict = {'Operator_Field': f_name, 'PTIT_Region': r['PTIT_Region']}
+            r_sum_days = 0.0
+            r_sum_vol = 0.0
+            for full_m, short_m in zip(MONTH_NAMES, MONTH_SHORT):
+                val = r.get(full_m, 0.0)
+                row_dict[short_m] = val if val > 0 else 0.0
+                if full_m in active_months and val > 0:
+                    d = get_days_in_month(full_m, sel_year)
+                    r_sum_days += d
+                    r_sum_vol += val * d
+            row_dict['เฉลี่ยทั้งปี'] = r_sum_vol / total_active_days if total_active_days > 0 else 0.0
+            row_dict['สะสมทั้งปี'] = r_sum_vol / meta['divisor']
+            rows_matrix_export.append(row_dict)
+
+        df_matrix_export = pd.DataFrame(rows_matrix_export)
+
+        # Download button for 12-Month Matrix
+        m_dl1, m_dl2 = st.columns([2.5, 1.5])
+        with m_dl1:
+            st.caption(f"📊 ตารางแสดงอัตราการผลิตรายเดือน ม.ค. – ธ.ค. พร้อมค่าเฉลี่ยถ่วงน้ำหนักและผลผลิตสะสมทั้งปี หน่วย: {meta['unit_d']} / {meta['unit_c']}")
+        with m_dl2:
+            excel_matrix_buf = export_12month_matrix_excel(
+                sel_year, df_matrix_export,
+                meta['slug'], f"{meta['unit_d']} / {meta['unit_c']}", report_theme_key
+            )
+            st.download_button(
+                label=f"📥 ดาวน์โหลด Excel เมทริกซ์ ({meta['slug']} {sel_year})",
+                data=excel_matrix_buf.getvalue(),
+                file_name=f"PTIT_12Month_Matrix_{sel_year}_{meta['slug']}_{report_theme_key}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"btn_dl_matrix_{sel_year}_{meta['slug']}"
+            )
+
+        # Display Dataframe
+        display_df = df_matrix_export.drop(columns=['PTIT_Region']).copy()
+        format_dict = {m: "{:,.1f}" if meta['dec'] == 1 else "{:,.0f}" for m in MONTH_SHORT}
+        format_dict['เฉลี่ยทั้งปี'] = "{:,.1f}" if meta['dec'] == 1 else "{:,.0f}"
+        format_dict['สะสมทั้งปี'] = "{:,.2f}"
+
+        st.dataframe(
+            display_df.style.format(format_dict, na_rep="-"),
+            use_container_width=True,
+            height=420
+        )
+
+        # Plotly Monthly Trend for Top 5 Fields
+        st.markdown("##### 📈 แนวโน้มการผลิตรายเดือนของแหล่งหลัก (Monthly Trend - Top 5 Fields)")
+        top_fields = df_matrix_export.nlargest(5, 'เฉลี่ยทั้งปี')['Operator_Field'].tolist()
+        chart_records = []
+        for _, r in df_matrix_export[df_matrix_export['Operator_Field'].isin(top_fields)].iterrows():
+            for short_m in MONTH_SHORT:
+                chart_records.append({
+                    'Field': r['Operator_Field'],
+                    'Month': short_m,
+                    'Value': r[short_m]
+                })
+        df_chart_m = pd.DataFrame(chart_records)
+        fig_trend = px.line(
+            df_chart_m, x='Month', y='Value', color='Field',
+            markers=True,
+            title=f"แนวโน้มการผลิตรายเดือน Top 5 Fields ({meta['unit_d']}) - ปี {sel_year}",
+            color_discrete_sequence=['#0284C7', '#C5A059', '#10B981', '#7C3AED', '#EF4444']
+        )
+        fig_trend.update_layout(
+            xaxis_title="เดือน", yaxis_title=meta['unit_d'],
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+    # ----------------------------------------------------
+    # SUBTAB 3: DYNAMIC PIVOT TABLE BUILDER
+    # ----------------------------------------------------
+    with ann_subtab3:
+        st.markdown("#### ⚡ ทางลัดแม่แบบ Pivot ด่วน (1-Click Bento Presets)")
+        p_c1, p_c2, p_c3, p_c4 = st.columns(4)
+        with p_c1:
+            if st.button("🏢 รายผู้ดำเนินการ", use_container_width=True, help="จัดกลุ่มตาม Operator และประเภทสัญญา"):
+                st.session_state['pv_row'] = ['ผู้ดำเนินการ']
+                st.session_state['pv_col'] = 'ประเภทสัญญา'
+                st.session_state['pv_metric'] = 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+                st.session_state['pv_agg'] = 'เฉลี่ยต่อวัน (Mean Daily Rate)'
+                st.rerun()
+        with p_c2:
+            if st.button("📜 รายประเภทสัญญา", use_container_width=True, help="จัดกลุ่มตามสัมปทาน Concession / PSC"):
+                st.session_state['pv_row'] = ['ประเภทสัญญา']
+                st.session_state['pv_col'] = 'พื้นที่'
+                st.session_state['pv_metric'] = 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+                st.session_state['pv_agg'] = 'เฉลี่ยต่อวัน (Mean Daily Rate)'
+                st.rerun()
+        with p_c3:
+            if st.button("🗺️ รายแอ่งปิโตรเลียม", use_container_width=True, help="จัดกลุ่มตามแอ่งปิโตรเลียม เช่น Pattani, Phitsanulok"):
+                st.session_state['pv_row'] = ['แอ่งปิโตรเลียม']
+                st.session_state['pv_col'] = 'พื้นที่'
+                st.session_state['pv_metric'] = 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+                st.session_state['pv_agg'] = 'เฉลี่ยต่อวัน (Mean Daily Rate)'
+                st.rerun()
+        with p_c4:
+            if st.button("📅 รายเดือน x มิติ", use_container_width=True, help="สรุปรายเดือนเทียบกับประเภทสัญญา"):
+                st.session_state['pv_row'] = ['เดือน']
+                st.session_state['pv_col'] = 'ประเภทสัญญา'
+                st.session_state['pv_metric'] = 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'
+                st.session_state['pv_agg'] = 'เฉลี่ยต่อวัน (Mean Daily Rate)'
+                st.rerun()
+
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown("##### 🎛️ ปรับแต่งมิติและตัวชี้วัด (Custom Pivot Dimension Selectors)")
+
+        bento_dim1, bento_dim2, bento_dim3, bento_dim4 = st.columns(4)
+        dim_options = [c for c in ['ผู้ดำเนินการ', 'ประเภทสัญญา', 'แอ่งปิโตรเลียม', 'พื้นที่', 'เดือน', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ'] if c in df_year_data.columns]
+        
+        default_rows = st.session_state.get('pv_row', ['ผู้ดำเนินการ'])
+        default_rows = [r for r in default_rows if r in dim_options] or ['ผู้ดำเนินการ']
+        default_col = st.session_state.get('pv_col', 'ประเภทสัญญา')
+        default_metric = st.session_state.get('pv_metric', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)')
+        default_agg = st.session_state.get('pv_agg', 'เฉลี่ยต่อวัน (Mean Daily Rate)')
+
+        with bento_dim1:
+            sel_rows = st.multiselect("แถว (Rows):", dim_options, default=default_rows, key="pivot_sel_rows")
+            if not sel_rows:
+                sel_rows = ['ผู้ดำเนินการ']
+        with bento_dim2:
+            col_opts = ['(ไม่มี - มิติเดียว)'] + [c for c in dim_options if c not in sel_rows]
+            sel_col_idx = col_opts.index(default_col) if default_col in col_opts else 0
+            sel_col = st.selectbox("คอลัมน์ (Columns):", col_opts, index=sel_col_idx, key="pivot_sel_cols")
+        with bento_dim3:
+            metric_candidates = [
+                'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)',
+                'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)',
+                'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)',
+                'น้ำมันดิบ (บาร์เรล/วัน)'
+            ]
+            metric_opts = [c for c in metric_candidates if c in df_year_data.columns]
+            sel_metric_idx = metric_opts.index(default_metric) if default_metric in metric_opts else 0
+            sel_metric = st.selectbox("ตัวชี้วัด (Metric):", metric_opts, index=sel_metric_idx, key="pivot_sel_metric")
+        with bento_dim4:
+            agg_opts = [
+                'เฉลี่ยต่อวัน (Mean Daily Rate)',
+                'ผลรวมสะสม (Sum Total)',
+                'สัดส่วนร้อยละ (% Share of Total)'
+            ]
+            sel_agg_idx = agg_opts.index(default_agg) if default_agg in agg_opts else 0
+            sel_agg = st.selectbox("การคำนวณ (Aggregation):", agg_opts, index=sel_agg_idx, key="pivot_sel_agg")
+
+        # Perform Pivot Table calculation
+        col_param = None if sel_col == '(ไม่มี - มิติเดียว)' else sel_col
+        aggfunc_to_use = 'mean' if 'เฉลี่ย' in sel_agg else 'sum'
+
+        try:
+            df_pv = pd.pivot_table(
+                df_year_data,
+                index=sel_rows,
+                columns=col_param,
+                values=sel_metric,
+                aggfunc=aggfunc_to_use,
+                margins=True,
+                margins_name='รวมทั้งหมด (Total)'
+            ).fillna(0.0)
+
+            if 'สัดส่วน' in sel_agg:
+                total_val = df_pv.iloc[-1, -1] if col_param else df_pv.iloc[-1]
+                if total_val > 0:
+                    df_pv = (df_pv / total_val) * 100.0
+
+            # Download Row
+            p_dl1, p_dl2 = st.columns([2.5, 1.5])
+            with p_dl1:
+                st.caption(f"📋 สรุปตาราง Pivot ตามมิติ: {' + '.join(sel_rows)} | คอลัมน์: {sel_col} | คำนวณ: {sel_agg}")
+            with p_dl2:
+                pivot_excel_buf = export_custom_pivot_excel(df_pv, title=f"PTIT_Pivot_{sel_year}")
+                st.download_button(
+                    label="📥 ดาวน์โหลด Pivot Table (Excel)",
+                    data=pivot_excel_buf.getvalue(),
+                    file_name=f"PTIT_Custom_Pivot_{sel_year}_{sel_metric}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"btn_dl_pivot_custom_{sel_year}"
+                )
+
+            # Display formatted dataframe
+            if 'สัดส่วน' in sel_agg:
+                st.dataframe(df_pv.map(lambda x: f"{x:.1f}%" if isinstance(x, (int, float)) and x > 0 else "-"), use_container_width=True)
+            else:
+                st.dataframe(df_pv.map(lambda x: f"{x:,.1f}" if isinstance(x, (int, float)) and x > 0 else "-"), use_container_width=True)
+
+            # Dynamic Visualization
+            st.markdown("##### 📊 แผนภูมิแสดงผลตามมิติที่เลือก (Interactive Visualization)")
+            # Exclude Total margin row for chart
+            df_plot_source = df_pv.drop(index='รวมทั้งหมด (Total)', errors='ignore')
+            if col_param and 'รวมทั้งหมด (Total)' in df_plot_source.columns:
+                df_plot_source = df_plot_source.drop(columns='รวมทั้งหมด (Total)')
+
+            df_reset = df_plot_source.reset_index()
+            if col_param:
+                df_melt = pd.melt(df_reset, id_vars=sel_rows, value_name=sel_metric, var_name=col_param)
+                fig_pv = px.bar(
+                    df_melt, x=sel_rows[0], y=sel_metric, color=col_param,
+                    barmode='group',
+                    title=f"{sel_metric} ({sel_agg}) ตาม {sel_rows[0]} และ {col_param}",
+                    color_discrete_sequence=['#0284C7', '#C5A059', '#10B981', '#7C3AED', '#EF4444', '#F59E0B']
+                )
+            else:
+                fig_pv = px.bar(
+                    df_reset, x=sel_rows[0], y=sel_metric,
+                    title=f"{sel_metric} ({sel_agg}) ตาม {sel_rows[0]}",
+                    color_discrete_sequence=['#0284C7']
+                )
+
+            fig_pv.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_pv, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"เกิดข้อผิดพลาดในการประมวลผล Pivot Table: {e}")
+
+
+def render_ptit_monthly_report(df_all_data, is_admin=False):
+    """ฟังก์ชันแสดงผลรายงานประจำเดือนสไตล์ Executive Letterhead ทางการ"""
+    # Month Selector
+    if 'ลำดับเดือน' not in df_all_data.columns:
+        df_all_data['ลำดับเดือน'] = df_all_data['เดือน'].map(MONTH_ORDER).fillna(99)
+
+    avail_months = df_all_data[['ปี', 'เดือน', 'ลำดับเดือน']].drop_duplicates().sort_values('ลำดับเดือน')
+    month_options = [f"{r['เดือน']} ปี {r['ปี']}" for _, r in avail_months.iterrows()]
+
+    # Month, Fang Input, Luxury Theme, and Filter Selector
+    sel_col1, sel_col2, sel_col3, sel_col4 = st.columns([1.4, 1.8, 1.6, 1.1])
+    with sel_col1:
+        selected_month_label = st.selectbox("📅 เลือกเดือนรายงาน:", month_options, index=len(month_options)-1)
+
+    # Parse selected month and year
+    sel_month = selected_month_label.split()[0]
+    sel_year = selected_month_label.split()[-1]
+
+    # Ensure PTIT columns exist (Self-healing from Master)
+    if 'PTIT_Region' not in df_all_data.columns:
+        if 'Lookup_Key' not in df_all_data.columns and 'แปลง_ไฟล์ดิบ' in df_all_data.columns:
+            df_all_data['Lookup_Key'] = df_all_data['พื้นที่'].astype(str) + '_' + df_all_data['แปลง_ไฟล์ดิบ'].astype(str) + '_' + df_all_data['แหล่ง_ไฟล์ดิบ'].astype(str)
+        df_m = load_master_mapping()
+        cols_to_add = [c for c in ['Lookup_Key', 'PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'] if c in df_m.columns]
+        if 'Lookup_Key' in df_all_data.columns:
+            df_all_data = pd.merge(df_all_data, df_m[cols_to_add], on='Lookup_Key', how='left')
+            st.session_state['df_flat_wide'] = df_all_data
+
+    # Filter data for chosen month
+    df_month_data = df_all_data[(df_all_data['เดือน'] == sel_month) & (df_all_data['ปี'].astype(str) == sel_year)].copy()
+
+    # DEDP Fang Value Retrieval & Role-based UI
+    saved_fang_val = get_fang_value(sel_year, sel_month)
+
+    with sel_col2:
+        if is_admin:
+            cf_in, cf_save = st.columns([2.2, 1.2])
+            with cf_in:
+                fang_val = st.number_input(
+                    f"🛢️ ค่าน้ำมันดิบ แหล่งฝาง ({sel_month}) [BPD]:",
+                    min_value=0.0,
+                    value=float(saved_fang_val),
+                    step=10.0,
+                    key=f"input_fang_{sel_month}_{sel_year}",
+                    help="ข้อมูลแหล่งฝางสังกัดกรมการพลังงานทหาร (DEDP) ผู้ดูแลระบบสามารถกรอกและกดบันทึกได้ทันที"
+                )
+            with cf_save:
+                st.write("")
+                st.write("")
+                if st.button("💾 บันทึก", key=f"btn_save_fang_single_{sel_month}_{sel_year}", help="บันทึกค่าน้ำมันดิบแหล่งฝางสำหรับเดือนนี้"):
+                    set_fang_value(sel_year, sel_month, fang_val)
+                    if 'df_flat_wide' in st.session_state:
+                        st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
+                    st.toast(f"✅ บันทึกค่าน้ำมันดิบแหล่งฝาง ({sel_month} {sel_year}): {fang_val:,.1f} BPD เรียบร้อยแล้ว")
+                    st.rerun()
+        else:
+            fang_val = saved_fang_val
+            if fang_val > 0:
+                st.markdown(f"""
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase;">🛢️ แหล่งฝาง (DEDP):</span>
+                    <span style="font-size: 15px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin-left: 6px;">{fang_val:,.1f} BPD</span>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
+                    <span style="font-size: 11px; font-weight: 600; color: #64748B;">🛢️ แหล่งฝาง (DEDP):</span>
+                    <span style="font-size: 13px; font-weight: 600; color: #94A3B8; margin-left: 6px;">0.0 BPD (ไม่มีการผลิต / รอรายงาน)</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with sel_col3:
+        selected_theme_label = st.selectbox(
+            "🎨 สไตล์เทมเพลต (Luxury Theme):",
+            [
+                "👑 Imperial Bronze & Champagne Gold (Signature Luxury)",
+                "💎 Royal Navy & Platinum (Sovereign Executive)",
+                "🏛️ Obsidian Platinum & Emerald (Energy Terminal)"
+            ],
+            index=0
+        )
+        if "Royal Navy" in selected_theme_label:
+            report_theme_key = "navy"
+        elif "Emerald" in selected_theme_label:
+            report_theme_key = "emerald"
+        else:
+            report_theme_key = "imperial"
+
+    with sel_col4:
+        st.write("")
+        st.write("")
+        show_zero_fields = st.checkbox("แสดงแหล่งยอด 0", value=False, help="หากติ๊กเลือก จะแสดงแหล่งที่ไม่มีการผลิตในเดือนนั้น เช่น PTTEPI / G8/50")
+
+    # Group and Aggregate by PTIT Operator / Field
+    # Group keys: PTIT_Region, PTIT_Operator_Field, PTIT_Order
+    df_agg = df_month_data.groupby(['PTIT_Region', 'PTIT_Operator_Field', 'PTIT_Order'], as_index=False).agg({
+        'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'sum',
+        'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'sum',
+        'น้ำมันดิบ (บาร์เรล/วัน)': 'sum'
+    }).rename(columns={
+        'ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)': 'Gas',
+        'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)': 'Cond',
+        'น้ำมันดิบ (บาร์เรล/วัน)': 'Crude',
+        'PTIT_Region': 'Region',
+        'PTIT_Operator_Field': 'Operator_Field',
+        'PTIT_Order': 'Order'
+    })
+
+    # Append or update Fang in df_agg
+    has_fang_row = ('Operator_Field' in df_agg.columns and (df_agg['Operator_Field'] == 'Defence Energy Department / Fang').any())
+    if fang_val > 0:
+        if not has_fang_row:
+            df_fang_row = pd.DataFrame([{
+                'Region': 'Onshore',
+                'Operator_Field': 'Defence Energy Department / Fang',
+                'Order': 13,
+                'Gas': 0.0,
+                'Cond': 0.0,
+                'Crude': float(fang_val)
+            }])
+            df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+        else:
+            df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = float(fang_val)
+    else:
+        if has_fang_row:
+            df_agg.loc[df_agg['Operator_Field'] == 'Defence Energy Department / Fang', 'Crude'] = 0.0
+        elif show_zero_fields:
+            df_fang_row = pd.DataFrame([{
+                'Region': 'Onshore',
+                'Operator_Field': 'Defence Energy Department / Fang',
+                'Order': 13,
+                'Gas': 0.0,
+                'Cond': 0.0,
+                'Crude': 0.0
+            }])
+            df_agg = pd.concat([df_agg, df_fang_row], ignore_index=True)
+
+    if not show_zero_fields:
+        df_agg = df_agg[(df_agg['Gas'] >= 0.001) | (df_agg['Cond'] >= 0.001) | (df_agg['Crude'] >= 0.001)].reset_index(drop=True)
+
+    df_agg = df_agg.sort_values('Order').reset_index(drop=True)
+
+    # Calculate Subtotals
+    onshore_items = df_agg[df_agg['Region'] == 'Onshore'].to_dict('records')
+    offshore_items = df_agg[df_agg['Region'] == 'Offshore'].to_dict('records')
+
+    onshore_sub = (
+        sum(x['Gas'] for x in onshore_items),
+        sum(x['Cond'] for x in onshore_items),
+        sum(x['Crude'] for x in onshore_items)
+    )
+    offshore_sub = (
+        sum(x['Gas'] for x in offshore_items),
+        sum(x['Cond'] for x in offshore_items),
+        sum(x['Crude'] for x in offshore_items)
+    )
+    grand_total = (
+        onshore_sub[0] + offshore_sub[0],
+        onshore_sub[1] + offshore_sub[1],
+        onshore_sub[2] + offshore_sub[2]
+    )
+
+    total_gas = grand_total[0]
+    total_cond = grand_total[1]
+    total_crude = grand_total[2]
+    
+    # Calculate official BOED from DMF data if present, otherwise standard conversion
+    if 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)' in df_month_data.columns:
+        total_boed = float(df_month_data['รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'].sum()) + float(fang_val if fang_val > 0 else 0)
+    else:
+        total_boed = (total_gas * 1000 / 5.615) + total_cond + total_crude
+
+    # ----------------------------------------------------
+    # Executive Bento Metric Ribbon (Key Production Highlights)
+    # ----------------------------------------------------
+    bento_themes = {
+        'imperial': {
+            'card_bg': '#FFFFFF',
+            'border': 'rgba(197, 160, 89, 0.45)',
+            'halo_border': '1.5px solid #C5A059',
+            'halo_shadow': '0 8px 24px rgba(197, 160, 89, 0.22)',
+            'tag_bg': 'rgba(197, 160, 89, 0.15)',
+            'tag_fg': '#8A6239',
+            'accent_num': '#1C1917',
+            'boed_bg': 'linear-gradient(135deg, #FFFDF9 0%, #FBF6EE 100%)'
+        },
+        'navy': {
+            'card_bg': '#FFFFFF',
+            'border': 'rgba(30, 58, 138, 0.35)',
+            'halo_border': '1.5px solid #38BDF8',
+            'halo_shadow': '0 8px 24px rgba(56, 189, 248, 0.22)',
+            'tag_bg': 'rgba(56, 189, 248, 0.15)',
+            'tag_fg': '#0284C7',
+            'accent_num': '#0F172A',
+            'boed_bg': 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)'
+        },
+        'emerald': {
+            'card_bg': '#FFFFFF',
+            'border': 'rgba(4, 120, 87, 0.35)',
+            'halo_border': '1.5px solid #10B981',
+            'halo_shadow': '0 8px 24px rgba(16, 185, 129, 0.22)',
+            'tag_bg': 'rgba(16, 185, 129, 0.15)',
+            'tag_fg': '#047857',
+            'accent_num': '#064E3B',
+            'boed_bg': 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
+        }
+    }
+    bt = bento_themes[report_theme_key]
+
+    html_bento = f"""
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 15px 0 20px 0;">
+        <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 11px; font-weight: 700; color: #0284C7; letter-spacing: 0.05em; text-transform: uppercase;">🔵 ก๊าซธรรมชาติ (Gas)</span>
+                <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">MMSCFD</span>
+            </div>
+            <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                {total_gas:,.1f}
+            </div>
+            <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                Onshore: <b>{onshore_sub[0]:,.1f}</b> • Offshore: <b>{offshore_sub[0]:,.1f}</b>
+            </div>
+        </div>
+        <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 11px; font-weight: 700; color: #D97706; letter-spacing: 0.05em; text-transform: uppercase;">🟠 ก๊าซธรรมชาติเหลว (Cond)</span>
+                <span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
+            </div>
+            <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                {total_cond:,.1f}
+            </div>
+            <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                อ่าวไทย (Offshore Gulf of Thailand 100%)
+            </div>
+        </div>
+        <div style="background: {bt['card_bg']}; border: 1px solid {bt['border']}; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">🛢️ น้ำมันดิบ (Crude Oil)</span>
+                <span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">BPD</span>
+            </div>
+            <div style="font-size: 24px; font-weight: 800; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                {total_crude:,.1f}
+            </div>
+            <div style="font-size: 11px; color: #64748B; margin-top: 5px;">
+                Onshore: <b>{onshore_sub[2]:,.1f}</b> • Offshore: <b>{offshore_sub[2]:,.1f}</b>
+            </div>
+        </div>
+        <div style="background: {bt['boed_bg']}; border: {bt['halo_border']}; border-radius: 14px; padding: 14px 18px; box-shadow: {bt['halo_shadow']};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 11px; font-weight: 800; color: {bt['tag_fg']}; letter-spacing: 0.06em; text-transform: uppercase;">⚡ รวมเทียบเท่าน้ำมันดิบ</span>
+                <span style="background: {bt['tag_bg']}; color: {bt['tag_fg']}; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;">BOED</span>
+            </div>
+            <div style="font-size: 24px; font-weight: 900; color: {bt['accent_num']}; font-family: 'JetBrains Mono', monospace; line-height: 1.2;">
+                {total_boed:,.1f}
+            </div>
+            <div style="font-size: 11px; color: #78716C; margin-top: 5px;">
+                รวมเทียบเท่าตามค่าความร้อนจริง (DMF Standard)
+            </div>
+        </div>
+    </div>
+    """
+    clean_bento = re.sub(r'<!--.*?-->', '', html_bento, flags=re.DOTALL)
+    clean_bento = "\n".join(line.strip() for line in clean_bento.splitlines() if line.strip())
+    if hasattr(st, 'html'):
+        st.html(clean_bento)
+    else:
+        st.markdown(clean_bento, unsafe_allow_html=True)
+
+    # ----------------------------------------------------
+    # UI/UX Pro Max: Dual Export & Distribution Center
+    # ----------------------------------------------------
+    st.markdown("""
+    <div style="display: flex; align-items: center; gap: 8px; margin: 18px 0 12px 0;">
+        <span style="font-size: 16px;">📦</span>
+        <span style="font-weight: 800; font-size: 14.5px; color: #0F172A;">ศูนย์ดาวน์โหลดข้อมูลและรายงาน (Export & Distribution Center)</span>
+        <span style="background: rgba(2, 132, 199, 0.1); color: #0284C7; font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 12px; margin-left: 4px;">
+            DUAL FORMAT
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    exp_c1, exp_c2 = st.columns(2, gap="medium")
+    with exp_c1:
+        st.markdown(f"""
+        <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                        📑 รายงานทางการ PTIT (Formatted Report)
+                    </span>
+                    <span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                        EXECUTIVE READY
+                    </span>
+                </div>
+                <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                    จัดรูปแบบทางการสไตล์ PTIT Focus ประจำเดือน <b>{sel_month} {sel_year}</b> ในธีม <b>{selected_theme_label.split('(')[0].strip()}</b> พร้อมผลรวม Onshore / Offshore สำหรับเสนอผู้บริหารหรือพิมพ์รายงาน
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        excel_buf = export_ptit_styled_excel(
+            sel_month, sel_year, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_total, theme=report_theme_key
+        )
+        st.download_button(
+            label=f"📥 ดาวน์โหลดตารางรายงาน PTIT ({sel_month} {sel_year})",
+            data=excel_buf,
+            file_name=f"PTIT_Domestic_Production_{sel_month}_{sel_year}_{report_theme_key}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True,
+            key="btn_dl_ptit_official_report"
+        )
+
+    with exp_c2:
+        st.markdown(f"""
+        <div style="background: white; border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 14px; padding: 16px 18px 14px 18px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03); min-height: 142px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13.5px; font-weight: 800; color: #0F172A; display: flex; align-items: center; gap: 6px;">
+                        📊 ฐานข้อมูลดิบรวมทั้งปี (Flat Table Database)
+                    </span>
+                    <span style="background: rgba(16, 185, 129, 0.12); color: #059669; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px;">
+                        POWER BI & PIVOT
+                    </span>
+                </div>
+                <div style="font-size: 12px; color: #64748B; line-height: 1.5; margin-bottom: 8px;">
+                    ฐานข้อมูล Flat Matrix รวมทั้งปี <b>{len(avail_months)} เดือน</b> ({len(df_all_data):,} แถว) โครงสร้าง 2D สะอาด ไม่มีเซลล์ผสาน เหมาะสำหรับวิเคราะห์ต่อด้วย Power BI, Tableau หรือ Excel Pivot
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        buf_flat = io.BytesIO()
+        with pd.ExcelWriter(buf_flat, engine='openpyxl') as wr_flat:
+            df_all_data.to_excel(wr_flat, sheet_name='Flat_Wide', index=False)
+            if 'df_flat_long' in st.session_state and not st.session_state['df_flat_long'].empty:
+                st.session_state['df_flat_long'].to_excel(wr_flat, sheet_name='Flat_Long_Unpivoted', index=False)
+        buf_flat.seek(0)
+        st.download_button(
+            label=f"📊 ดาวน์โหลดฐานข้อมูล Flat Table รวมทั้งปี (.xlsx)",
+            data=buf_flat,
+            file_name=f"petroleum_production_flat_table_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="secondary",
+            use_container_width=True,
+            key="btn_dl_flat_table_tab4"
+        )
+
+    st.markdown("""
+    <div style="margin: 10px 0 18px 0; padding: 9px 16px; background: rgba(248, 250, 252, 0.85); border: 1px dashed #CBD5E1; border-radius: 10px; font-size: 12px; color: #475569; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span>✨</span>
+            <span><b>คำแนะนำการพิมพ์ / บันทึก PDF:</b> ตารางด้านล่างแสดงผลสไตล์ Executive Letterhead สามารถกด <kbd style="background: #E2E8F0; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Ctrl + P</kbd> บนคีย์บอร์ดเพื่อสั่งพิมพ์หรือบันทึกเป็น PDF ได้ทันที</span>
+        </div>
+        <span style="font-size: 11px; color: #94A3B8;">PTIT Focus Statistics Hub</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Units Reference and Verification Expander
+    with st.expander("📐 ตารางทบทวนและตรวจสอบหน่วยวัดปิโตรเลียม (Petroleum Units Audit Reference)", expanded=False):
+        st.markdown("""
+        <div style="background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(203, 213, 225, 0.8); border-radius: 12px; padding: 14px; font-size: 13px; overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-family: 'Hanken Grotesk', sans-serif;">
+                <thead>
+                    <tr style="background: #F8FAFC; border-bottom: 2px solid #CBD5E1; color: #0F172A; font-size: 12.5px;">
+                        <th style="padding: 8px 12px; text-align: left;">หมวดรายงาน</th>
+                        <th style="padding: 8px 12px; text-align: left;">ผลิตภัณฑ์</th>
+                        <th style="padding: 8px 12px; text-align: left;">หน่วยหลัก (Primary Unit)</th>
+                        <th style="padding: 8px 12px; text-align: left;">หน่วยเทียบเท่า / หน่วยราคา</th>
+                        <th style="padding: 8px 12px; text-align: left;">คำอธิบายและนิยามทางสถิติ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 8px 12px; font-weight: 700; color: #0284C7;" rowspan="3">🏭 การผลิตปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Production Report)</span></td>
+                        <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (Natural Gas)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(2, 132, 199, 0.12); color: #0284C7; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCFD</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                        <td style="padding: 8px 12px; color: #475569;">ล้านลูกบาศก์ฟุตต่อวัน (วัดทางกายภาพ) เทียบเท่าบาร์เรล/วันตามค่าความร้อนเฉพาะของแต่ละแหล่ง</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติเหลว</b> (Condensate)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                        <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (ไฮโดรคาร์บอนเหลวเบาที่แยกได้จากก๊าซธรรมชาติในอ่าวไทย)</td>
+                    </tr>
+                    <tr style="border-bottom: 2px solid #CBD5E1;">
+                        <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">BPD</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">BOED</td>
+                        <td style="padding: 8px 12px; color: #475569;">บาร์เรลต่อวัน (รวมแหล่งสิริกิติ์, อ่าวไทย, และแหล่งฝาง กรมการพลังงานทหาร DEDP)</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 8px 12px; font-weight: 700; color: #D97706;" rowspan="4">💰 การจำหน่ายปิโตรเลียม<br><span style="font-size: 11px; font-weight: normal; color: #64748B;">(Sales & Fiscal Report)</span></td>
+                        <td style="padding: 8px 12px;"><b>ก๊าซธรรมชาติ</b> (2 รูปแบบ)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">MMSCF</span> (ปริมาตร)<br><span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-top: 3px; display: inline-block;">MMBTU</span> (ความร้อน)</td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/MMBTU</b><br>(BTU/scf)</td>
+                        <td style="padding: 8px 12px; color: #475569;">ปริมาตรใช้วัดทางวิศวกรรม ส่วนความร้อนใช้คิดเงินตามสัญญา GSA และคิดราคาปากหลุม</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 8px 12px;"><b>คอนเดนเสท</b> (Condensate)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(217, 119, 6, 0.12); color: #D97706; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
+                        <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 8px 12px;"><b>น้ำมันดิบ</b> (Crude Oil)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(71, 85, 105, 0.12); color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">บาร์เรล (BBL)</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/บาร์เรล</b></td>
+                        <td style="padding: 8px 12px; color: #475569;">ปริมาณจำหน่ายจริงรายเดือน และราคาเฉลี่ย ณ ปากหลุม (Wellhead Price)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 12px;"><b>ก๊าซปิโตรเลียมเหลว</b> (LPG)</td>
+                        <td style="padding: 8px 12px;"><span style="background: rgba(147, 51, 234, 0.12); color: #7E22CE; font-family: 'JetBrains Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 4px;">กิโลกรัม (kg)</span></td>
+                        <td style="padding: 8px 12px; font-family: 'JetBrains Mono', monospace;"><b>บาท/กิโลกรัม</b></td>
+                        <td style="padding: 8px 12px; color: #475569;">กิโลกรัมที่จำหน่ายจากแหล่งสิริกิติ์ และราคาเฉลี่ยต่อกิโลกรัม</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # HTML Table Generator
+    def fmt(val, is_bpd=False):
+        if val is None or val == 0:
+            return "&nbsp;"
+        if val < 0.05:
+            return "0.0"
+        if is_bpd:
+            return f"{val:,.1f}"
+        return f"{val:.1f}"
+
+    # Theme Design Tokens for Table
+    theme_table_tokens = {
+        'imperial': {
+            'card_bg': '#FFFFFF',
+            'card_border': 'rgba(197, 160, 89, 0.45)',
+            'card_shadow': '0 20px 48px -12px rgba(44, 30, 18, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+            'masthead_bg': 'linear-gradient(135deg, #1C1917 0%, #2A2118 60%, #38271A 100%)',
+            'masthead_accent': '#C5A059',
+            'masthead_org': '#D4AF37',
+            'badge_bg': 'rgba(212, 175, 55, 0.18)',
+            'badge_fg': '#E5C378',
+            'badge_border': 'rgba(212, 175, 55, 0.4)',
+            'th_main_bg': 'linear-gradient(135deg, #24180E 0%, #332216 100%)',
+            'th_sub_bg': '#2E2218',
+            'th_sub_color': '#FAF6F0',
+            'unit_chip_bg': 'rgba(197, 160, 89, 0.22)',
+            'unit_chip_color': '#F5D899',
+            'unit_chip_border': 'rgba(197, 160, 89, 0.45)',
+            'sec_bg': 'linear-gradient(90deg, #784E20 0%, #966734 50%, #7D5325 100%)',
+            'sec_color': '#FFFFFF',
+            'sec_badge_bg': 'rgba(0, 0, 0, 0.2)',
+            'sec_badge_color': '#FFFFFF',
+            'zebra_bg': '#FAF7F2',
+            'hover_bg': '#F5EFE6',
+            'hover_border': '#C5A059',
+            'tot_bg': 'linear-gradient(90deg, #EFE5D5 0%, #E3D3BE 100%)',
+            'tot_color': '#1C1917',
+            'tot_border_top': '#784E20',
+            'tot_border_bot': '#3D240E',
+            'grid_border': '#E8E2D8'
+        },
+        'navy': {
+            'card_bg': '#FFFFFF',
+            'card_border': 'rgba(30, 58, 138, 0.35)',
+            'card_shadow': '0 20px 48px -12px rgba(15, 23, 42, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+            'masthead_bg': 'linear-gradient(135deg, #0A1128 0%, #0F172A 60%, #1E293B 100%)',
+            'masthead_accent': '#38BDF8',
+            'masthead_org': '#93C5FD',
+            'badge_bg': 'rgba(56, 189, 248, 0.18)',
+            'badge_fg': '#38BDF8',
+            'badge_border': 'rgba(56, 189, 248, 0.4)',
+            'th_main_bg': 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+            'th_sub_bg': '#162038',
+            'th_sub_color': '#F1F5F9',
+            'unit_chip_bg': 'rgba(56, 189, 248, 0.18)',
+            'unit_chip_color': '#38BDF8',
+            'unit_chip_border': 'rgba(56, 189, 248, 0.4)',
+            'sec_bg': 'linear-gradient(90deg, #1E3A8A 0%, #2563EB 50%, #1E40AF 100%)',
+            'sec_color': '#FFFFFF',
+            'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+            'sec_badge_color': '#FFFFFF',
+            'zebra_bg': '#F8FAFC',
+            'hover_bg': '#EFF6FF',
+            'hover_border': '#38BDF8',
+            'tot_bg': 'linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 100%)',
+            'tot_color': '#0F172A',
+            'tot_border_top': '#1E3A8A',
+            'tot_border_bot': '#0F172A',
+            'grid_border': '#E2E8F0'
+        },
+        'emerald': {
+            'card_bg': '#FFFFFF',
+            'card_border': 'rgba(4, 120, 87, 0.35)',
+            'card_shadow': '0 20px 48px -12px rgba(6, 78, 59, 0.14), 0 3px 10px rgba(0, 0, 0, 0.04)',
+            'masthead_bg': 'linear-gradient(135deg, #091310 0%, #0F201B 60%, #162F27 100%)',
+            'masthead_accent': '#10B981',
+            'masthead_org': '#6EE7B7',
+            'badge_bg': 'rgba(16, 185, 129, 0.18)',
+            'badge_fg': '#34D399',
+            'badge_border': 'rgba(16, 185, 129, 0.4)',
+            'th_main_bg': 'linear-gradient(135deg, #0F281E 0%, #132620 100%)',
+            'th_sub_bg': '#132620',
+            'th_sub_color': '#ECFDF5',
+            'unit_chip_bg': 'rgba(16, 185, 129, 0.18)',
+            'unit_chip_color': '#34D399',
+            'unit_chip_border': 'rgba(16, 185, 129, 0.4)',
+            'sec_bg': 'linear-gradient(90deg, #065F46 0%, #047857 50%, #064E3B 100%)',
+            'sec_color': '#FFFFFF',
+            'sec_badge_bg': 'rgba(0, 0, 0, 0.25)',
+            'sec_badge_color': '#FFFFFF',
+            'zebra_bg': '#F0FDF4',
+            'hover_bg': '#ECFDF5',
+            'hover_border': '#10B981',
+            'tot_bg': 'linear-gradient(90deg, #ECFDF5 0%, #D1FAE5 100%)',
+            'tot_color': '#064E3B',
+            'tot_border_top': '#065F46',
+            'tot_border_bot': '#064E3B',
+            'grid_border': '#D1FAE5'
+        }
+    }
+    tk = theme_table_tokens[report_theme_key]
+
+    html_table = f"""
+    <style>
+        .ptit-luxury-wrapper {{
+            background: {tk['card_bg']};
+            border: 1px solid {tk['card_border']};
+            box-shadow: {tk['card_shadow']};
+            border-radius: 18px;
+            overflow: hidden;
+            margin-top: 20px;
+            font-family: 'Hanken Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }}
+        .ptit-masthead {{
+            background: {tk['masthead_bg']};
+            border-top: 4px solid {tk['masthead_accent']};
+            padding: 22px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }}
+        .ptit-masthead-org {{
+            font-family: 'Cinzel', 'Playfair Display', Georgia, serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: {tk['masthead_org']};
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }}
+        .ptit-masthead-title {{
+            font-family: 'Manrope', 'Hanken Grotesk', sans-serif;
+            font-size: 21px;
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.015em;
+            line-height: 1.25;
+        }}
+        .ptit-masthead-sub {{
+            font-size: 13px;
+            color: #E2E8F0;
+            margin-top: 3px;
+            opacity: 0.92;
+        }}
+        .ptit-masthead-badges {{
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+        }}
+        .ptit-badge {{
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            display: inline-block;
+        }}
+        .ptit-badge-gold {{
+            background: {tk['badge_bg']};
+            color: {tk['badge_fg']};
+            border: 1px solid {tk['badge_border']};
+        }}
+        .ptit-table-responsive {{
+            overflow-x: auto;
+            width: 100%;
+        }}
+        .ptit-luxury-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+            color: #1E293B;
+        }}
+        .ptit-luxury-table th, .ptit-luxury-table td {{
+            border: 1px solid {tk['grid_border']};
+            padding: 7px 14px;
+            line-height: 1.4;
+        }}
+        .th-main {{
+            background: {tk['th_main_bg']};
+            color: #FFFFFF;
+            text-align: center;
+            font-weight: 700;
+            font-size: 13.5px;
+            letter-spacing: 0.02em;
+            padding: 10px 14px !important;
+        }}
+        .th-col {{
+            background: {tk['th_sub_bg']};
+            color: {tk['th_sub_color']};
+            text-align: center;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 9px 12px !important;
+        }}
+        .unit-pill {{
+            display: inline-block;
+            background: {tk['unit_chip_bg']};
+            color: {tk['unit_chip_color']};
+            border: 1px solid {tk['unit_chip_border']};
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 5px;
+            margin-top: 3px;
+        }}
+        .tr-section {{
+            background: {tk['sec_bg']};
+            color: {tk['sec_color']};
+            font-weight: 700;
+            font-size: 13.5px;
+        }}
+        .tr-section td {{
+            border-color: rgba(0, 0, 0, 0.15) !important;
+            padding: 8px 14px !important;
+        }}
+        .sec-badge {{
+            display: inline-block;
+            background: {tk['sec_badge_bg']};
+            color: {tk['sec_badge_color']};
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }}
+        .tr-item-even {{
+            background: {tk['zebra_bg']};
+            transition: background-color 150ms ease, border-left 150ms ease;
+        }}
+        .tr-item-odd {{
+            background: #FFFFFF;
+            transition: background-color 150ms ease, border-left 150ms ease;
+        }}
+        .tr-item-even:hover, .tr-item-odd:hover {{
+            background: {tk['hover_bg']} !important;
+        }}
+        .tr-item-even:hover td:first-child, .tr-item-odd:hover td:first-child {{
+            border-left: 3px solid {tk['hover_border']} !important;
+            padding-left: 25px !important;
+        }}
+        .tr-total {{
+            background: {tk['tot_bg']};
+            color: {tk['tot_color']};
+            font-weight: 800;
+            border-top: 2px solid {tk['tot_border_top']} !important;
+            border-bottom: 3px double {tk['tot_border_bot']} !important;
+            font-size: 14px;
+        }}
+        .tr-total td {{
+            padding: 11px 14px !important;
+            border-top: 2px solid {tk['tot_border_top']} !important;
+            border-bottom: 3px double {tk['tot_border_bot']} !important;
+        }}
+        .num-cell {{
+            text-align: right;
+            font-family: 'JetBrains Mono', 'SF Mono', monospace;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em;
+        }}
+        .tot-num {{
+            font-size: 14.5px !important;
+            font-weight: 800 !important;
+        }}
+        .ptit-footnote-box {{
+            background: #FAFAF9;
+            border-top: 1px solid {tk['grid_border']};
+            padding: 14px 24px;
+            font-size: 11.5px;
+            color: #64748B;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }}
+        @media print {{
+            body * {{
+                visibility: hidden !important;
+            }}
+            .ptit-luxury-wrapper, .ptit-luxury-wrapper * {{
+                visibility: visible !important;
+            }}
+            .ptit-luxury-wrapper {{
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                border: 1px solid #777 !important;
+                box-shadow: none !important;
+            }}
+        }}
+    </style>
+
+    <div class="ptit-luxury-wrapper">
+        <div class="ptit-masthead">
+            <div>
+                <div class="ptit-masthead-org">PETROLEUM INSTITUTE OF THAILAND</div>
+                <div class="ptit-masthead-title">DOMESTIC PETROLEUM PRODUCTION REPORT</div>
+                <div class="ptit-masthead-sub">รายงานสถิติปริมาณการผลิตปิโตรเลียมในประเทศ ประจำเดือน {sel_month} {sel_year}</div>
+            </div>
+            <div class="ptit-masthead-badges">
+                <span class="ptit-badge ptit-badge-gold">🔒 OFFICIAL AUDITED RECORD</span>
+                <span class="ptit-badge ptit-badge-gold">📅 PTIT FOCUS RELEASE</span>
+            </div>
+        </div>
+
+        <div class="ptit-table-responsive">
+            <table class="ptit-luxury-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="th-main" style="width: 46%; text-align: left; padding-left: 20px !important;">
+                            Operator / Field <span style="font-size: 12px; font-weight: normal; opacity: 0.85;">({sel_month} {sel_year})</span>
+                        </th>
+                        <th colspan="3" class="th-main">
+                            Domestic Production
+                        </th>
+                    </tr>
+                    <tr>
+                        <th class="th-col" style="width: 18%;">
+                            Natural Gas<br><span class="unit-pill">MMSCFD</span>
+                        </th>
+                        <th class="th-col" style="width: 18%;">
+                            Condensate<br><span class="unit-pill">BPD</span>
+                        </th>
+                        <th class="th-col" style="width: 18%;">
+                            Crude<br><span class="unit-pill">BPD</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="tr-section">
+                        <td style="padding-left: 18px !important;">
+                            <span class="sec-badge">🏞️ ONSHORE BASIN</span>
+                        </td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[0])}</td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[1], True)}</td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(onshore_sub[2], True)}</td>
+                    </tr>
+    """
+
+    for idx, it in enumerate(onshore_items):
+        row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
+        html_table += f"""
+                    <tr class="{row_cls}">
+                        <td style="padding-left: 28px;">{it['Operator_Field']}</td>
+                        <td class="num-cell">{fmt(it['Gas'])}</td>
+                        <td class="num-cell">{fmt(it['Cond'], True)}</td>
+                        <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                    </tr>
+        """
+
+    html_table += f"""
+                    <tr class="tr-section">
+                        <td style="padding-left: 18px !important;">
+                            <span class="sec-badge">🌊 OFFSHORE GULF OF THAILAND</span>
+                        </td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[0])}</td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[1], True)}</td>
+                        <td class="num-cell" style="font-weight: 700;">{fmt(offshore_sub[2], True)}</td>
+                    </tr>
+    """
+
+    for idx, it in enumerate(offshore_items):
+        row_cls = "tr-item-even" if (idx % 2 == 1) else "tr-item-odd"
+        html_table += f"""
+                    <tr class="{row_cls}">
+                        <td style="padding-left: 28px;">{it['Operator_Field']}</td>
+                        <td class="num-cell">{fmt(it['Gas'])}</td>
+                        <td class="num-cell">{fmt(it['Cond'], True)}</td>
+                        <td class="num-cell">{fmt(it['Crude'], True)}</td>
+                    </tr>
+        """
+
+    html_table += f"""
+                    <tr class="tr-total">
+                        <td style="text-align: center; font-family: 'Manrope', sans-serif;">Total Domestic Production</td>
+                        <td class="num-cell tot-num">{fmt(grand_total[0])}</td>
+                        <td class="num-cell tot-num">{fmt(grand_total[1], True)}</td>
+                        <td class="num-cell tot-num">{fmt(grand_total[2], True)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="ptit-footnote-box">
+            <div>
+                <div><b>Note:</b> &nbsp; Data shown as "0.0" indicates production figure less than 0.05.</div>
+                <div style="margin-top: 3px;"><b>Source:</b> Department of Mineral Fuels (DMF), &nbsp;Defence Energy Department (DEDP)</div>
+            </div>
+            <div style="text-align: right;">
+                <div><b>Official Publication:</b> Petroleum Institute of Thailand (PTIT Focus Statistics)</div>
+                <div style="margin-top: 3px; color: #94A3B8;">Verified National Hydrocarbon Production Telemetry</div>
+            </div>
+        </div>
+    </div>
+    """
+
+    clean_html = re.sub(r'<!--.*?-->', '', html_table, flags=re.DOTALL)
+    clean_html = "\n".join(line.strip() for line in clean_html.splitlines() if line.strip())
+    if hasattr(st, 'html'):
+        st.html(clean_html)
+    else:
+        st.markdown(clean_html, unsafe_allow_html=True)
+
+
+
+# ====================================================
+# TAB 4: PTIT DOMESTIC PRODUCTION REPORT
+# ====================================================
+with tab_ptit_report:
+    st.subheader("📑 รายงานปริมาณการผลิตปิโตรเลียมในประเทศ (PTIT Domestic Production Report)")
+    st.caption("ตารางรายงานสรุปรายเดือนและรายงานประจำปีตามมาตรฐานของ สถาบันปิโตรเลียมแห่งประเทศไทย (PTIT Focus Statistics)")
+
+    if 'df_flat_wide' in st.session_state:
+        df_all_data = st.session_state['df_flat_wide']
+
+        report_period_mode = st.radio(
+            "เลือกระดับรายงานการผลิต (Reporting Period & Analytical Mode):",
+            ["📅 รายงานประจำเดือน (Monthly Report)", "👑 รายงานประจำปี & Pivot Builder (Annual Report & Custom Matrix)"],
+            horizontal=True,
+            key="ptit_report_period_mode"
+        )
+
+        if report_period_mode == "👑 รายงานประจำปี & Pivot Builder (Annual Report & Custom Matrix)":
+            render_ptit_annual_report(df_all_data, is_admin)
+        else:
+            render_ptit_monthly_report(df_all_data, is_admin)
     else:
         if st.session_state.get('user_role', 'viewer') == 'admin':
             st.info("💡 ยังไม่มีข้อมูลการผลิตในระบบ สามารถกดปุ่ม '⚡ 1-Click Auto Sync การผลิต' ในแถบเมนูด้านซ้ายเพื่อดึงข้อมูลสดจาก DMF ได้ทันทีครับ")
