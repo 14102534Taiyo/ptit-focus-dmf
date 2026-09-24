@@ -2763,7 +2763,7 @@ def render_production_master():
             key="fang_data_editor"
         )
 
-        col_f_btn, col_f_info = st.columns([1.5, 3])
+        col_f_btn, col_f_dl, col_f_info = st.columns([1.5, 1.5, 2])
         with col_f_btn:
             if st.button("💾 บันทึกตารางค่าน้ำมันดิบแหล่งฝาง", type="primary", use_container_width=True, key="btn_save_fang_table"):
                 updated_dict = {}
@@ -2773,11 +2773,44 @@ def render_production_master():
                 save_fang_master(fang_all)
                 if 'df_flat_wide' in st.session_state:
                     st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
+                    try:
+                        with pd.ExcelWriter(DEFAULT_OUTPUT_FILE, engine='openpyxl') as writer:
+                            st.session_state['df_flat_wide'].to_excel(writer, sheet_name='Flat_Wide', index=False)
+                            if 'df_flat_long' in st.session_state:
+                                st.session_state['df_flat_long'].to_excel(writer, sheet_name='Flat_Long_Unpivoted', index=False)
+                    except Exception:
+                        pass
                 st.success(f"🎉 บันทึกค่าน้ำมันดิบแหล่งฝางประจำปี {sel_f_year} เรียบร้อยแล้ว! ข้อมูลจะปรากฏในรายงานรายเดือนทันที")
                 st.rerun()
 
+        with col_f_dl:
+            fang_backup_json = json.dumps(fang_all, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="📥 ดาวน์โหลดไฟล์สำรอง (Backup JSON)",
+                data=fang_backup_json,
+                file_name="fang_production_master.json",
+                mime="application/json",
+                use_container_width=True,
+                key="btn_dl_fang_backup"
+            )
+
         with col_f_info:
-            st.caption(f"📁 บันทึกข้อมูลที่: `fang_production_master.json` (อัปเดตรายงานทุกเดือนแบบ Real-time)")
+            st.caption(f"📁 บันทึกข้อมูลที่: `fang_production_master.json` พร้อมซิงค์เข้าตาราง Flat Table อัตโนมัติ")
+
+        with st.expander("📤 กู้คืนข้อมูลสำรองแหล่งฝาง (Restore from Backup JSON)", expanded=False):
+            st.caption("หากมีการ Redeploy บน Cloud หรือข้อมูลถูกรีเซ็ต สามารถอัปโหลดไฟล์สำรอง `fang_production_master.json` เพื่อกู้คืนตัวเลขครบทุกเดือนได้ทันที")
+            uploaded_fang = st.file_uploader("เลือกไฟล์ fang_production_master.json:", type=["json"], key="upload_fang_restore")
+            if uploaded_fang is not None:
+                try:
+                    restored_data = json.load(uploaded_fang)
+                    if st.button("⚡ ยืนยันการกู้คืนข้อมูลแหล่งฝาง", type="primary", key="btn_confirm_fang_restore"):
+                        save_fang_master(restored_data)
+                        if 'df_flat_wide' in st.session_state:
+                            st.session_state['df_flat_wide'] = inject_fang_to_dataframe(st.session_state['df_flat_wide'])
+                        st.success("✅ กู้คืนข้อมูลค่าน้ำมันดิบแหล่งฝางสำเร็จเรียบร้อยแล้ว!")
+                        st.rerun()
+                except Exception as err:
+                    st.error(f"ไฟล์ JSON ไม่ถูกต้อง: {err}")
 
 if is_admin and tab_master is not None:
     with tab_master:
