@@ -173,6 +173,39 @@ h1, h2, h3, h4, h5, h6 {
     border: 1px solid rgba(186, 230, 253, 0.6) !important;
     box-shadow: 0 4px 20px rgba(2, 62, 138, 0.03) !important;
 }
+
+/* Executive A4 Landscape Print Engine */
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 8mm 10mm 8mm 10mm;
+    }
+    header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"], .stTabs [data-baseweb="tab-list"], .no-print {
+        display: none !important;
+    }
+    [data-testid="stAppViewContainer"] {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #FFFFFF !important;
+    }
+    .main .block-container {
+        padding: 0 !important;
+        max-width: 100% !important;
+    }
+    .ptit-letterhead {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        border: 1px solid #CBD5E1 !important;
+        page-break-inside: avoid;
+    }
+    .ptit-letterhead table {
+        page-break-inside: auto;
+    }
+    .ptit-letterhead tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -196,6 +229,20 @@ DAYS_IN_MONTH = {
     'พฤษภาคม': 31, 'มิถุนายน': 30, 'กรกฎาคม': 31, 'สิงหาคม': 31,
     'กันยายน': 30, 'ตุลาคม': 31, 'พฤศจิกายน': 30, 'ธันวาคม': 31
 }
+
+def get_days_in_month(month_name, year_val=2569):
+    """คำนวณจำนวนวันในเดือนอย่างถูกต้อง พร้อมตรวจเช็ครอบปีอธิกสุรทิน (Leap Year) 29 ก.พ."""
+    try:
+        y_int = int(year_val)
+        y_ce = y_int - 543 if y_int > 2400 else y_int
+    except Exception:
+        y_ce = 2026
+    if str(month_name).strip() == 'กุมภาพันธ์':
+        if (y_ce % 4 == 0 and y_ce % 100 != 0) or (y_ce % 400 == 0):
+            return 29
+        return 28
+    return DAYS_IN_MONTH.get(str(month_name).strip(), 30)
+
 
 # ----------------------------------------------------
 # Helper Functions & Crystal Aqua Plotly Theme
@@ -424,7 +471,7 @@ def parse_sales_file(file_input, filename_label):
     if ymatch:
         year_val = ymatch.group(1)
 
-    days_cnt = DAYS_IN_MONTH.get(month_name, 30)
+    days_cnt = get_days_in_month(month_name, year_val)
     current_product = None
     records = []
 
@@ -840,23 +887,8 @@ def export_ptit_styled_excel(month_name, year_val, onshore_rows, offshore_rows, 
 # ----------------------------------------------------
 # Annual Report Calculation & Excel Export Helpers
 # ----------------------------------------------------
-DAYS_IN_MONTH = {
-    'มกราคม': 31, 'กุมภาพันธ์': 28, 'มีนาคม': 31, 'เมษายน': 30,
-    'พฤษภาคม': 31, 'มิถุนายน': 30, 'กรกฎาคม': 31, 'สิงหาคม': 31,
-    'กันยายน': 30, 'ตุลาคม': 31, 'พฤศจิกายน': 30, 'ธันวาคม': 31
-}
 
-def get_days_in_month(month_name, year_val=2569):
-    try:
-        y_int = int(year_val)
-        y_ce = y_int - 543 if y_int > 2400 else y_int
-    except Exception:
-        y_ce = 2026
-    if str(month_name).strip() == 'กุมภาพันธ์':
-        if (y_ce % 4 == 0 and y_ce % 100 != 0) or (y_ce % 400 == 0):
-            return 29
-        return 28
-    return DAYS_IN_MONTH.get(str(month_name).strip(), 30)
+
 
 def export_annual_styled_excel(year_val, onshore_items, offshore_items, onshore_sub, offshore_sub, grand_tot, active_months, theme="imperial"):
     """สร้างไฟล์ Excel รายงานประจำปีสไตล์ Luxury Executive พร้อม Daily Avg และ Cumulative Total"""
@@ -1482,151 +1514,252 @@ data_domain = st.sidebar.radio(
     index=0
 )
 
-# Sidebar System Status Box
+# ----------------------------------------------------
+# TIER 3: Petroleum Units & Conversion Toolkit (Killer Feature)
+# ----------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.markdown("##### 📊 สถานะข้อมูลในระบบ")
+st.sidebar.markdown("##### 📐 เครื่องมือ & ตัวแปลงหน่วยปิโตรเลียม")
 
-if 'df_flat_wide' in st.session_state and not st.session_state['df_flat_wide'].empty:
-    df_sb = st.session_state['df_flat_wide']
-    loaded_months = len(df_sb['เดือน'].dropna().unique())
-    total_rows = len(df_sb)
-    st.sidebar.success(f"**การผลิต:** {loaded_months} เดือน ({total_rows:,} แถว)")
-else:
-    st.sidebar.info("**การผลิต:** ยังไม่พบข้อมูลในระบบ")
+with st.sidebar.expander("🔄 ตัวแปลงหน่วยปิโตรเลียมทันใจ", expanded=False):
+    c_mode = st.selectbox(
+        "เลือกประเภทผลิตภัณฑ์ / หน่วย:",
+        [
+            "ก๊าซธรรมชาติ (MMSCFD)",
+            "น้ำมันดิบ & คอนเดนเสท (BPD)",
+            "พลังงานรวมเทียบเท่า (BOED)",
+            "ก๊าซปริมาณรวม (MMSCF/เดือน)",
+            "น้ำมันปริมาณรวม (Barrels/เดือน)"
+        ],
+        key="sb_calc_mode"
+    )
+    def_val = 1000.0 if "ก๊าซ" in c_mode or "BOED" in c_mode else 500.0
+    c_val = st.number_input(
+        "ใส่ตัวเลขที่ต้องการคำนวณ:",
+        min_value=0.0,
+        value=def_val,
+        step=50.0,
+        key="sb_calc_val"
+    )
+    c_days = st.selectbox(
+        "จำนวนวันในเดือนที่คำนวณ:",
+        [30, 31, 28, 29],
+        index=0,
+        key="sb_calc_days"
+    )
 
-if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
-    df_s_sb = st.session_state['df_sale_flat']
-    l_s_m = len(df_s_sb['เดือน'].dropna().unique())
-    t_s_r = len(df_s_sb)
-    st.sidebar.success(f"**การจำหน่าย:** {l_s_m} เดือน ({t_s_r:,} แถว)")
-else:
-    st.sidebar.info("**การจำหน่าย:** ยังไม่พบข้อมูลในระบบ")
+    st.markdown("<div style='height: 1px; background: #E2E8F0; margin: 8px 0 6px 0;'></div>", unsafe_allow_html=True)
+    st.caption("📊 **ผลการคำนวณเทียบเท่ามาตรฐาน:**")
 
-# Sidebar DMF Cloud Connection & 1-Click Auto Sync Widget
-st.sidebar.markdown("---")
-st.sidebar.markdown("##### 🌐 DMF Portal & Auto-Sync")
-try:
-    dmf_stat = cached_dmf_status()
-    is_dmf_online = (dmf_stat.get('status') == 'online')
-    if is_dmf_online:
-        st.sidebar.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; font-size: 12px; margin-bottom: 8px;">
-            <span style="color: #065F46; font-weight: 600;"><span class="live-dot" style="width: 6px; height: 6px; margin-right: 6px;"></span>ระบบ DMF ออนไลน์</span>
-            <span style="font-family: 'JetBrains Mono', monospace; color: #047857; font-size: 11px;">{dmf_stat['elapsed_sec']}s</span>
+    if c_mode == "ก๊าซธรรมชาติ (MMSCFD)":
+        boed_val = (c_val * 1_000_000) / 5800.0
+        month_mmscf = c_val * c_days
+        mmbtu_day = c_val * 1000.0
+        st.markdown(f"""
+        <div style="background: rgba(2, 132, 199, 0.08); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; border-left: 3px solid #0284C7; line-height: 1.6;">
+            • <b>เทียบเท่าน้ำมันดิบ:</b> <span style="font-weight:700; color:#0369A1;">{boed_val:,.1f}</span> BOED<br/>
+            • <b>ปริมาณรวมเดือน ({c_days} วัน):</b> <span style="font-weight:700; color:#0F172A;">{month_mmscf:,.1f}</span> MMSCF<br/>
+            • <b>ค่าความร้อนโดยประมาณ:</b> <span style="font-weight:700; color:#047857;">{mmbtu_day:,.0f}</span> MMBTU/วัน
         </div>
         """, unsafe_allow_html=True)
+
+    elif c_mode == "น้ำมันดิบ & คอนเดนเสท (BPD)":
+        month_bbl = c_val * c_days
+        litres_day = c_val * 158.9873
+        tonnes_day = c_val / 7.33
+        st.markdown(f"""
+        <div style="background: rgba(234, 88, 12, 0.08); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; border-left: 3px solid #EA580C; line-height: 1.6;">
+            • <b>ปริมาณรวมเดือน ({c_days} วัน):</b> <span style="font-weight:700; color:#C2410C;">{month_bbl:,.0f}</span> Barrels<br/>
+            • <b>เทียบเท่าปริมาตร:</b> <span style="font-weight:700; color:#0F172A;">{litres_day:,.0f}</span> ลิตร/วัน<br/>
+            • <b>เทียบเท่าน้ำหนัก:</b> <span style="font-weight:700; color:#334155;">{tonnes_day:,.1f}</span> ตัน/วัน (~7.33 bbl/t)
+        </div>
+        """, unsafe_allow_html=True)
+
+    elif c_mode == "พลังงานรวมเทียบเท่า (BOED)":
+        equiv_gas = (c_val * 5800.0) / 1_000_000.0
+        month_boe = c_val * c_days
+        st.markdown(f"""
+        <div style="background: rgba(147, 51, 234, 0.08); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; border-left: 3px solid #9333EA; line-height: 1.6;">
+            • <b>หากเป็นก๊าซธรรมชาติ:</b> <span style="font-weight:700; color:#7E22CE;">{equiv_gas:,.2f}</span> MMSCFD<br/>
+            • <b>หากเป็นน้ำมันดิบ:</b> <span style="font-weight:700; color:#7E22CE;">{c_val:,.1f}</span> BPD<br/>
+            • <b>พลังงานรวมเดือน ({c_days} วัน):</b> <span style="font-weight:700; color:#0F172A;">{month_boe:,.0f}</span> BOE
+        </div>
+        """, unsafe_allow_html=True)
+
+    elif c_mode == "ก๊าซปริมาณรวม (MMSCF/เดือน)":
+        daily_rate = c_val / c_days if c_days > 0 else 0
+        boed_val = (daily_rate * 1_000_000) / 5800.0
+        st.markdown(f"""
+        <div style="background: rgba(2, 132, 199, 0.08); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; border-left: 3px solid #0284C7; line-height: 1.6;">
+            • <b>อัตราเฉลี่ยต่อวัน:</b> <span style="font-weight:700; color:#0369A1;">{daily_rate:,.2f}</span> MMSCFD ({c_days} วัน)<br/>
+            • <b>เทียบเท่าน้ำมันดิบ:</b> <span style="font-weight:700; color:#0F172A;">{boed_val:,.1f}</span> BOED
+        </div>
+        """, unsafe_allow_html=True)
+
+    elif c_mode == "น้ำมันปริมาณรวม (Barrels/เดือน)":
+        daily_bpd = c_val / c_days if c_days > 0 else 0
+        st.markdown(f"""
+        <div style="background: rgba(234, 88, 12, 0.08); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; border-left: 3px solid #EA580C; line-height: 1.6;">
+            • <b>อัตราเฉลี่ยต่อวัน:</b> <span style="font-weight:700; color:#C2410C;">{daily_bpd:,.1f}</span> BPD ({c_days} วัน)
+        </div>
+        """, unsafe_allow_html=True)
+
+with st.sidebar.expander("📚 ค่าคงที่ & ตัวคูณอ้างอิง PTIT", expanded=False):
+    st.markdown("""
+    <div style="font-size: 11px; color: #334155; line-height: 1.7;">
+        <b>มาตรฐานสถิติพลังงานสากล & กรมเชื้อเพลิงฯ:</b><br/>
+        • <b>1 BOE</b> = 5,800 ลูกบาศก์ฟุต (ก๊าซธรรมชาติ)<br/>
+        • <b>1 MMSCFD</b> ≈ 172.41 BOED<br/>
+        • <b>1 Barrel (น้ำมัน)</b> = 42 US Gal ≈ 158.987 ลิตร<br/>
+        • <b>1 Metric Ton</b> ≈ 7.33 บาร์เรล (API ~34°)<br/>
+        • <b>ก๊าซธรรมชาติไทย</b> ≈ 1,000 BTU/scf (~980–1,050)<br/>
+        • <b>1 BOE</b> ≈ 5.8 MMBTU
+    </div>
+    """, unsafe_allow_html=True)
+
+# ----------------------------------------------------
+# TIER 4: System Status & DMF Auto-Sync Panel (Collapsed by default for Viewers)
+# ----------------------------------------------------
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚙️ สถานะระบบ & DMF Live Sync", expanded=(user_role == 'admin')):
+    # Production & Sales Loaded Telemetry
+    if 'df_flat_wide' in st.session_state and not st.session_state['df_flat_wide'].empty:
+        df_sb = st.session_state['df_flat_wide']
+        loaded_months = len(df_sb['เดือน'].dropna().unique())
+        total_rows = len(df_sb)
+        st.success(f"**การผลิต:** {loaded_months} เดือน ({total_rows:,} แถว)")
     else:
-        st.sidebar.warning(f"DMF Portal: {dmf_stat.get('message', 'ออฟไลน์')}")
-except Exception:
-    is_dmf_online = False
-    st.sidebar.info("ตรวจสอบการเชื่อมต่อ DMF")
+        st.info("**การผลิต:** ยังไม่พบข้อมูลในระบบ")
 
-try:
-    dmf_inv = cached_dmf_inventory()
-except Exception:
-    dmf_inv = {'production': [], 'sales': []}
+    if 'df_sale_flat' in st.session_state and not st.session_state['df_sale_flat'].empty:
+        df_s_sb = st.session_state['df_sale_flat']
+        l_s_m = len(df_s_sb['เดือน'].dropna().unique())
+        t_s_r = len(df_s_sb)
+        st.success(f"**การจำหน่าย:** {l_s_m} เดือน ({t_s_r:,} แถว)")
+    else:
+        st.info("**การจำหน่าย:** ยังไม่พบข้อมูลในระบบ")
 
-# Auto-Detect and 1-Click Sync based on current module
-if is_dmf_online:
-    if "การผลิต" in data_domain:
-        prod_online_items = dmf_inv.get('production', [])
-        if prod_online_items:
-            latest_online_prod = prod_online_items[0]
-            df_cur_p = st.session_state.get('df_flat_wide')
-            p_sys_months = df_cur_p['เดือน'].dropna().unique().tolist() if df_cur_p is not None and not df_cur_p.empty else []
-            num_online_p = len(prod_online_items)
-            num_sys_p = len(p_sys_months)
-            
-            if num_online_p > num_sys_p:
-                st.sidebar.markdown(f"""
-                <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.1);">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="color: #92400E; font-weight: 700; font-size: 12.5px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
-                        <span style="background: #F59E0B; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">NEW</span>
-                    </div>
-                    <div style="font-size: 11.5px; color: #475569; margin-top: 5px; line-height: 1.5;">
-                        • <b>เว็บ DMF มี:</b> {latest_online_prod['label']} ({num_online_p} เดือน)<br/>
-                        • <b>ในระบบมี:</b> {num_sys_p} เดือน
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+    try:
+        dmf_stat = cached_dmf_status()
+        is_dmf_online = (dmf_stat.get('status') == 'online')
+        if is_dmf_online:
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; font-size: 11.5px; margin-bottom: 8px;">
+                <span style="color: #065F46; font-weight: 600;"><span class="live-dot" style="width: 6px; height: 6px; margin-right: 6px;"></span>ระบบ DMF ออนไลน์</span>
+                <span style="font-family: 'JetBrains Mono', monospace; color: #047857; font-size: 10.5px;">{dmf_stat['elapsed_sec']}s</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning(f"DMF Portal: {dmf_stat.get('message', 'ออฟไลน์')}")
+    except Exception:
+        is_dmf_online = False
+        st.info("ตรวจสอบการเชื่อมต่อ DMF")
+
+    try:
+        dmf_inv = cached_dmf_inventory()
+    except Exception:
+        dmf_inv = {'production': [], 'sales': []}
+
+    # Auto-Detect and 1-Click Sync based on current module
+    if is_dmf_online:
+        if "การผลิต" in data_domain:
+            prod_online_items = dmf_inv.get('production', [])
+            if prod_online_items:
+                latest_online_prod = prod_online_items[0]
+                df_cur_p = st.session_state.get('df_flat_wide')
+                p_sys_months = df_cur_p['เดือน'].dropna().unique().tolist() if df_cur_p is not None and not df_cur_p.empty else []
+                num_online_p = len(prod_online_items)
+                num_sys_p = len(p_sys_months)
                 
-                if st.session_state.get('user_role', 'viewer') == 'admin':
-                    if st.sidebar.button("⚡ 1-Click Auto Sync การผลิต (RAM)", type="primary", use_container_width=True, key="btn_sync_prod_sidebar"):
-                        run_auto_sync_production(prod_online_items)
-                    st.sidebar.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                if num_online_p > num_sys_p:
+                    st.markdown(f"""
+                    <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 10px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #92400E; font-weight: 700; font-size: 12px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
+                            <span style="background: #F59E0B; color: white; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 5px;">NEW</span>
+                        </div>
+                        <div style="font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.5;">
+                            • <b>เว็บ DMF มี:</b> {latest_online_prod['label']} ({num_online_p} เดือน)<br/>
+                            • <b>ในระบบมี:</b> {num_sys_p} เดือน
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.session_state.get('user_role', 'viewer') == 'admin':
+                        if st.button("⚡ 1-Click Auto Sync การผลิต (RAM)", type="primary", use_container_width=True, key="btn_sync_prod_sidebar"):
+                            run_auto_sync_production(prod_online_items)
+                        st.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                    else:
+                        st.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
                 else:
-                    st.sidebar.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
-            else:
-                st.sidebar.markdown(f"""
-                <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="color: #065F46; font-weight: 700; font-size: 12px;">✅ ข้อมูลการผลิตเป็นปัจจุบัน</span>
-                        <span style="background: #10B981; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">{num_sys_p} เดือน</span>
+                    st.markdown(f"""
+                    <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #065F46; font-weight: 700; font-size: 11.5px;">✅ ข้อมูลการผลิตเป็นปัจจุบัน</span>
+                            <span style="background: #10B981; color: white; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 5px;">{num_sys_p} เดือน</span>
+                        </div>
+                        <div style="font-size: 10.5px; color: #047857; margin-top: 3px;">
+                            ครบถ้วน (ม.ค. - {latest_online_prod['month_name']} {latest_online_prod['year_be']})
+                        </div>
                     </div>
-                    <div style="font-size: 11px; color: #047857; margin-top: 4px;">
-                        ครบถ้วน (ม.ค. - {latest_online_prod['month_name']} {latest_online_prod['year_be']})
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.session_state.get('user_role', 'viewer') == 'admin':
-                    if st.sidebar.button("🔄 รีเฟรชการผลิต (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_prod_sidebar"):
-                        run_auto_sync_production(prod_online_items)
-                    st.sidebar.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
+                    """, unsafe_allow_html=True)
+                    if st.session_state.get('user_role', 'viewer') == 'admin':
+                        if st.button("🔄 รีเฟรชการผลิต (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_prod_sidebar"):
+                            run_auto_sync_production(prod_online_items)
+                        st.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
 
-    elif "การจำหน่าย" in data_domain:
-        sale_online_items = dmf_inv.get('sales', [])
-        if sale_online_items:
-            latest_online_sale = sale_online_items[0]
-            df_cur_s = st.session_state.get('df_sale_flat')
-            s_sys_months = df_cur_s['เดือน'].dropna().unique().tolist() if df_cur_s is not None and not df_cur_s.empty else []
-            num_online_s = len(sale_online_items)
-            num_sys_s = len(s_sys_months)
-            
-            if num_online_s > num_sys_s:
-                st.sidebar.markdown(f"""
-                <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.1);">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="color: #92400E; font-weight: 700; font-size: 12.5px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
-                        <span style="background: #F59E0B; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">NEW</span>
-                    </div>
-                    <div style="font-size: 11.5px; color: #475569; margin-top: 5px; line-height: 1.5;">
-                        • <b>เว็บ DMF มี:</b> {latest_online_sale['label']} ({num_online_s} เดือน)<br/>
-                        • <b>ในระบบมี:</b> {num_sys_s} เดือน
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+        elif "การจำหน่าย" in data_domain:
+            sale_online_items = dmf_inv.get('sales', [])
+            if sale_online_items:
+                latest_online_sale = sale_online_items[0]
+                df_cur_s = st.session_state.get('df_sale_flat')
+                s_sys_months = df_cur_s['เดือน'].dropna().unique().tolist() if df_cur_s is not None and not df_cur_s.empty else []
+                num_online_s = len(sale_online_items)
+                num_sys_s = len(s_sys_months)
                 
-                if st.session_state.get('user_role', 'viewer') == 'admin':
-                    if st.sidebar.button("⚡ 1-Click Auto Sync ยอดขาย (RAM)", type="primary", use_container_width=True, key="btn_sync_sale_sidebar"):
-                        run_auto_sync_sales(sale_online_items)
-                    st.sidebar.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                if num_online_s > num_sys_s:
+                    st.markdown(f"""
+                    <div style="background: rgba(254, 243, 199, 0.9); border: 1px solid #F59E0B; border-radius: 10px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #92400E; font-weight: 700; font-size: 12px;">🔔 ตรวจพบเดือนใหม่บน DMF!</span>
+                            <span style="background: #F59E0B; color: white; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 5px;">NEW</span>
+                        </div>
+                        <div style="font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.5;">
+                            • <b>เว็บ DMF มี:</b> {latest_online_sale['label']} ({num_online_s} เดือน)<br/>
+                            • <b>ในระบบมี:</b> {num_sys_s} เดือน
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.session_state.get('user_role', 'viewer') == 'admin':
+                        if st.button("⚡ 1-Click Auto Sync ยอดขาย (RAM)", type="primary", use_container_width=True, key="btn_sync_sale_sidebar"):
+                            run_auto_sync_sales(sale_online_items)
+                        st.caption("💡 ดึงสดทุกเดือนเข้า RAM + อัปเดตย้อนหลังและบันทึก Flat Table ทันที")
+                    else:
+                        st.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
                 else:
-                    st.sidebar.info("⏳ ตรวจพบข้อมูลเดือนใหม่ (รอผู้ดูแลระบบกด Sync)")
-            else:
-                st.sidebar.markdown(f"""
-                <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="color: #065F46; font-weight: 700; font-size: 12px;">✅ ข้อมูลยอดขายเป็นปัจจุบัน</span>
-                        <span style="background: #10B981; color: white; font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px;">{num_sys_s} เดือน</span>
+                    st.markdown(f"""
+                    <div style="background: rgba(209, 250, 229, 0.7); border: 1px solid #10B981; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #065F46; font-weight: 700; font-size: 11.5px;">✅ ข้อมูลยอดขายเป็นปัจจุบัน</span>
+                            <span style="background: #10B981; color: white; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 5px;">{num_sys_s} เดือน</span>
+                        </div>
+                        <div style="font-size: 10.5px; color: #047857; margin-top: 3px;">
+                            ครบถ้วน (ม.ค. - {latest_online_sale['month_name']} {latest_online_sale['year_ce']})
+                        </div>
                     </div>
-                    <div style="font-size: 11px; color: #047857; margin-top: 4px;">
-                        ครบถ้วน (ม.ค. - {latest_online_sale['month_name']} {latest_online_sale['year_ce']})
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.session_state.get('user_role', 'viewer') == 'admin':
-                    if st.sidebar.button("🔄 รีเฟรชยอดขาย (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_sale_sidebar"):
-                        run_auto_sync_sales(sale_online_items)
-                    st.sidebar.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
+                    """, unsafe_allow_html=True)
+                    if st.session_state.get('user_role', 'viewer') == 'admin':
+                        if st.button("🔄 รีเฟรชยอดขาย (อัปเดตย้อนหลัง)", use_container_width=True, key="btn_refresh_sale_sidebar"):
+                            run_auto_sync_sales(sale_online_items)
+                        st.caption("💡 ดึงใหม่ทุกเดือนเพื่ออัปเดตกรณี DMF แก้ไขตัวเลขย้อนหลัง")
 
-st.sidebar.markdown("""
-<div style="font-size: 11px; line-height: 1.8; color: #475569; padding-left: 2px;">
-    • <a href="https://dmf.go.th/public/epsummary/data/index/menu/1100" target="_blank" style="color: #0284C7; text-decoration: none;">DMF E&P Summary Report</a><br/>
-    • <a href="https://dmf.go.th/public/createpetroleum/data/index/menu/1114/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">รายงานการผลิต (เมนู 1114)</a><br/>
-    • <a href="https://dmf.go.th/public/salevalue/data/index/menu/774/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">รายงานการจำหน่าย (เมนู 774)</a>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-size: 10.5px; line-height: 1.8; color: #64748B; padding-top: 6px; border-top: 1px dashed #E2E8F0; margin-top: 8px;">
+        • <a href="https://dmf.go.th/public/epsummary/data/index/menu/1100" target="_blank" style="color: #0284C7; text-decoration: none;">DMF E&P Summary</a><br/>
+        • <a href="https://dmf.go.th/public/createpetroleum/data/index/menu/1114/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">DMF ผลิต (1114)</a><br/>
+        • <a href="https://dmf.go.th/public/salevalue/data/index/menu/774/groupid/1" target="_blank" style="color: #0284C7; text-decoration: none;">DMF จำหน่าย (774)</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
 # Page Views for Non-Production Domains
@@ -3445,22 +3578,28 @@ def render_ptit_annual_report(df_all_data, is_admin=False):
         if 'Lookup_Key' in df_year_data.columns:
             df_year_data = pd.merge(df_year_data, df_m[cols_to_add], on='Lookup_Key', how='left')
 
-    # Status & YTD Indicator Banner
+    # Status & YTD Indicator Banner with Fang DEDP Provenance Badge
     period_status_html = f"""
-    <div style="background: rgba(248, 250, 252, 0.95); border: 1px solid #CBD5E1; border-radius: 12px; padding: 10px 16px; margin: 12px 0 18px 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 18px;">{'🟢' if is_full_year else '🟡'}</span>
+    <div style="background: rgba(248, 250, 252, 0.95); border: 1px solid #CBD5E1; border-radius: 12px; padding: 12px 18px; margin: 12px 0 16px 0; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px;">{'🟢' if is_full_year else '🟡'}</span>
+                <div>
+                    <span style="font-size: 13px; font-weight: 700; color: #0F172A;">สถานะรอบรายงานประจำปี {sel_year}:</span>
+                    <span style="font-size: 12.5px; color: #334155; margin-left: 6px;">
+                        {'ข้อมูลครบถ้วนเต็มปี (12 เดือน / 365 วัน)' if is_full_year else f'ข้อมูลสะสมระหว่างปี (YTD {len(active_months)} เดือน: {active_months[0]} – {active_months[-1]} {sel_year} | รวม {total_active_days} วันทำการผลิตสะสม)'}
+                    </span>
+                </div>
+            </div>
             <div>
-                <span style="font-size: 13px; font-weight: 700; color: #0F172A;">สถานะรอบรายงานประจำปี {sel_year}:</span>
-                <span style="font-size: 12.5px; color: #334155; margin-left: 6px;">
-                    {'ข้อมูลครบถ้วนเต็มปี (12 เดือน / 365 วัน)' if is_full_year else f'ข้อมูลสะสมระหว่างปี (YTD {len(active_months)} เดือน: {active_months[0]} – {active_months[-1]} {sel_year} | รวม {total_active_days} วันทำการผลิตสะสม)'}
+                <span style="background: {'rgba(16, 185, 129, 0.15)' if is_full_year else 'rgba(245, 158, 11, 0.15)'}; color: {'#065F46' if is_full_year else '#92400E'}; border: 1px solid {'rgba(16, 185, 129, 0.35)' if is_full_year else 'rgba(245, 158, 11, 0.35)'}; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                    {'Full Year Official' if is_full_year else 'YTD Verified Telemetry'}
                 </span>
             </div>
         </div>
-        <div>
-            <span style="background: {'rgba(16, 185, 129, 0.15)' if is_full_year else 'rgba(245, 158, 11, 0.15)'}; color: {'#065F46' if is_full_year else '#92400E'}; border: 1px solid {'rgba(16, 185, 129, 0.35)' if is_full_year else 'rgba(245, 158, 11, 0.35)'}; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
-                {'Full Year Official' if is_full_year else 'YTD Verified Telemetry'}
-            </span>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #E2E8F0; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #0369A1;">
+            <span style="background: #E0F2FE; color: #0284C7; font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid #BAE6FD;">DEDP INTEGRATED</span>
+            <span>🛡️ <b>การบูรณาการข้อมูลแหล่งฝาง:</b> สถิติน้ำมันดิบแหล่งฝางนำเข้าและตรวจสอบตรงตามสถิติทางการของกรมการพลังงานทหาร (DEDP) บูรณาการร่วมกับฐานข้อมูลสัมปทานและสัญญาแบ่งปันผลผลิต (DMF) ครบถ้วน</span>
         </div>
     </div>
     """
@@ -4244,16 +4383,22 @@ def render_ptit_monthly_report(df_all_data, is_admin=False):
             fang_val = saved_fang_val
             if fang_val > 0:
                 st.markdown(f"""
-                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
-                    <span style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase;">🛢️ แหล่งฝาง (DEDP):</span>
-                    <span style="font-size: 15px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin-left: 6px;">{fang_val:,.1f} BPD</span>
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase;">🛢️ แหล่งฝาง (DEDP):</span>
+                        <span style="font-size: 15px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; margin-left: 6px;">{fang_val:,.1f} BPD</span>
+                    </div>
+                    <span style="background: #0284C7; color: white; font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">DEDP VERIFIED</span>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
-                <div style="background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px;">
-                    <span style="font-size: 11px; font-weight: 600; color: #64748B;">🛢️ แหล่งฝาง (DEDP):</span>
-                    <span style="font-size: 13px; font-weight: 600; color: #94A3B8; margin-left: 6px;">0.0 BPD (ไม่มีการผลิต / รอรายงาน)</span>
+                <div style="background: rgba(148, 163, 184, 0.08); border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 10px; padding: 7px 12px; margin-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <span style="font-size: 11px; font-weight: 600; color: #64748B;">🛢️ แหล่งฝาง (DEDP):</span>
+                        <span style="font-size: 13px; font-weight: 600; color: #94A3B8; margin-left: 6px;">0.0 BPD (ไม่มีการผลิต)</span>
+                    </div>
+                    <span style="background: #94A3B8; color: white; font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px;">DEDP DATA</span>
                 </div>
                 """, unsafe_allow_html=True)
 
