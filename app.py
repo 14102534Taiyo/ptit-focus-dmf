@@ -4268,6 +4268,33 @@ def render_ptit_annual_report(df_all_data, is_admin=False):
                 margins_name='รวมทั้งหมด (Total)'
             ).fillna(0.0)
 
+            # Reorder columns chronologically if column is 'เดือน'
+            if col_param == 'เดือน':
+                cols = [c for c in df_pv.columns if c != 'รวมทั้งหมด (Total)']
+                sorted_cols = sorted(cols, key=lambda m: MONTH_ORDER.get(str(m).strip(), 99))
+                if 'รวมทั้งหมด (Total)' in df_pv.columns:
+                    sorted_cols.append('รวมทั้งหมด (Total)')
+                df_pv = df_pv.reindex(columns=sorted_cols)
+
+            # Reorder rows chronologically if 'เดือน' is in sel_rows
+            if 'เดือน' in sel_rows:
+                if len(sel_rows) == 1:
+                    idx_rows = [i for i in df_pv.index if i != 'รวมทั้งหมด (Total)']
+                    sorted_idx = sorted(idx_rows, key=lambda m: MONTH_ORDER.get(str(m).strip(), 99))
+                    if 'รวมทั้งหมด (Total)' in df_pv.index:
+                        sorted_idx.append('รวมทั้งหมด (Total)')
+                    df_pv = df_pv.reindex(index=sorted_idx)
+                else:
+                    m_pos = sel_rows.index('เดือน')
+                    idx_rows = [i for i in df_pv.index if i != 'รวมทั้งหมด (Total)' and i != ('รวมทั้งหมด (Total)',) * len(sel_rows)]
+                    sorted_idx = sorted(idx_rows, key=lambda tup: (
+                        tup[:m_pos] if isinstance(tup, tuple) else (),
+                        MONTH_ORDER.get(str(tup[m_pos] if isinstance(tup, tuple) else tup).strip(), 99),
+                        tup[m_pos+1:] if isinstance(tup, tuple) else ()
+                    ))
+                    margin_rows = [i for i in df_pv.index if i not in idx_rows]
+                    df_pv = df_pv.reindex(index=sorted_idx + margin_rows)
+
             if 'สัดส่วน' in sel_agg:
                 total_val = df_pv.iloc[-1, -1] if col_param else df_pv.iloc[-1]
                 if total_val > 0:
@@ -4302,19 +4329,29 @@ def render_ptit_annual_report(df_all_data, is_admin=False):
                 df_plot_source = df_plot_source.drop(columns='รวมทั้งหมด (Total)')
 
             df_reset = df_plot_source.reset_index()
+            # Category orders dict to ensure Plotly honors chronological order
+            cat_orders = {}
+            if col_param == 'เดือน':
+                cat_orders['เดือน'] = [c for c in df_pv.columns if c != 'รวมทั้งหมด (Total)']
+            if 'เดือน' in sel_rows:
+                if len(sel_rows) == 1:
+                    cat_orders['เดือน'] = [i for i in df_pv.index if i != 'รวมทั้งหมด (Total)']
+
             if col_param:
                 df_melt = pd.melt(df_reset, id_vars=sel_rows, value_name=sel_metric, var_name=col_param)
                 fig_pv = px.bar(
                     df_melt, x=sel_rows[0], y=sel_metric, color=col_param,
                     barmode='group',
                     title=f"{sel_metric} ({sel_agg}) ตาม {sel_rows[0]} และ {col_param}",
-                    color_discrete_sequence=['#0284C7', '#C5A059', '#10B981', '#7C3AED', '#EF4444', '#F59E0B']
+                    color_discrete_sequence=['#0284C7', '#C5A059', '#10B981', '#7C3AED', '#EF4444', '#F59E0B'],
+                    category_orders=cat_orders
                 )
             else:
                 fig_pv = px.bar(
                     df_reset, x=sel_rows[0], y=sel_metric,
                     title=f"{sel_metric} ({sel_agg}) ตาม {sel_rows[0]}",
-                    color_discrete_sequence=['#0284C7']
+                    color_discrete_sequence=['#0284C7'],
+                    category_orders=cat_orders
                 )
 
             fig_pv.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
