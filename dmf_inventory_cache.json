@@ -1,0 +1,96 @@
+{
+  "production": [
+    {
+      "year_be": 2569,
+      "month": 8,
+      "month_name": "สิงหาคม",
+      "label": "สิงหาคม 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 7,
+      "month_name": "กรกฎาคม",
+      "label": "กรกฎาคม 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 6,
+      "month_name": "มิถุนายน",
+      "label": "มิถุนายน 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 5,
+      "month_name": "พฤษภาคม",
+      "label": "พฤษภาคม 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 4,
+      "month_name": "เมษายน",
+      "label": "เมษายน 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 3,
+      "month_name": "มีนาคม",
+      "label": "มีนาคม 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 2,
+      "month_name": "กุมภาพันธ์",
+      "label": "กุมภาพันธ์ 2569"
+    },
+    {
+      "year_be": 2569,
+      "month": 1,
+      "month_name": "มกราคม",
+      "label": "มกราคม 2569"
+    }
+  ],
+  "sales": [
+    {
+      "year_ce": 2026,
+      "month": 7,
+      "month_name": "กรกฎาคม",
+      "label": "กรกฎาคม 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 6,
+      "month_name": "มิถุนายน",
+      "label": "มิถุนายน 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 5,
+      "month_name": "พฤษภาคม",
+      "label": "พฤษภาคม 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 4,
+      "month_name": "เมษายน",
+      "label": "เมษายน 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 3,
+      "month_name": "มีนาคม",
+      "label": "มีนาคม 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 2,
+      "month_name": "กุมภาพันธ์",
+      "label": "กุมภาพันธ์ 2026"
+    },
+    {
+      "year_ce": 2026,
+      "month": 1,
+      "month_name": "มกราคม",
+      "label": "มกราคม 2026"
+    }
+  ]
+}

@@ -1836,8 +1836,11 @@ if data_domain == "การจำหน่ายและมูลค่า (DM
 
             dmf_inv = cached_dmf_inventory()
             sale_online_list = dmf_inv.get('sales', [])
+            is_live_s = dmf_inv.get('is_live', True)
 
             if sale_online_list:
+                if not is_live_s:
+                    st.info("💡 **โหมดคลังข้อมูลสำรอง (Cloud Fallback Mode):** เนื่องจากเซิร์ฟเวอร์ Streamlit Cloud อยู่ต่างประเทศและไฟร์วอลล์ของ DMF ปฏิเสธการเข้าถึง ระบบได้ดึงรายการเดือนจากแคชและไฟล์ในระบบมาให้คุณสามารถกดสตรีมข้อมูลขึ้น Dashboard ได้ตามปกติ")
                 col_sel_s1, col_sel_s2 = st.columns([3, 1.2])
                 with col_sel_s1:
                     opts_sale = [f"{item['label']} (ปี {item['year_ce']} เดือน {item['month']})" for item in sale_online_list]
@@ -2706,8 +2709,11 @@ def render_production_converter():
 
         dmf_inv = cached_dmf_inventory()
         prod_online_list = dmf_inv.get('production', [])
+        is_live_p = dmf_inv.get('is_live', True)
 
         if prod_online_list:
+            if not is_live_p:
+                st.info("💡 **โหมดคลังข้อมูลสำรอง (Cloud Fallback Mode):** เนื่องจากเซิร์ฟเวอร์ Streamlit Cloud อยู่ต่างประเทศและไฟร์วอลล์ของ DMF ปฏิเสธการเข้าถึง ระบบได้ดึงรายการเดือนจากแคชและไฟล์ในระบบมาให้คุณสามารถกดสตรีมข้อมูลขึ้น Dashboard ได้ตามปกติ")
             col_sel_p1, col_sel_p2 = st.columns([3, 1.2])
             with col_sel_p1:
                 opts_prod = [f"{item['label']} (เดือน {item['month']})" for item in prod_online_list]
