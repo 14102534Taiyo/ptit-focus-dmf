@@ -1,0 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Manrope', 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  
+  --surface-canvas: #F8FAFC;
+  --surface-card: rgba(255, 255, 255, 0.82);
+  --surface-card-hover: rgba(255, 255, 255, 0.94);
+  --border-subtle: rgba(203, 213, 225, 0.65);
+  --border-specular: rgba(255, 255, 255, 0.95);
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+}
+
+.dark {
+  --surface-canvas: #070C18;
+  --surface-card: rgba(15, 23, 42, 0.78);
+  --surface-card-hover: rgba(30, 41, 59, 0.88);
+  --border-subtle: rgba(51, 65, 85, 0.65);
+  --border-specular: rgba(255, 255, 255, 0.12);
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Background Atmosphere Glow */
+.bg-mesh-pattern {
+  background: 
+    radial-gradient(120% 80% at 50% 0%, rgba(2, 132, 199, 0.08) 0%, rgba(248, 250, 252, 0) 70%),
+    radial-gradient(80% 50% at 100% 20%, rgba(197, 160, 89, 0.05) 0%, rgba(248, 250, 252, 0) 60%),
+    var(--surface-canvas);
+  background-attachment: fixed;
+}
+
+.dark .bg-mesh-pattern {
+  background: 
+    radial-gradient(120% 80% at 50% 0%, rgba(2, 132, 199, 0.15) 0%, rgba(7, 12, 24, 0) 70%),
+    radial-gradient(80% 50% at 100% 20%, rgba(197, 160, 89, 0.08) 0%, rgba(7, 12, 24, 0) 60%),
+    var(--surface-canvas);
+  background-attachment: fixed;
+}
+
+/* Glassmorphism Bento Card Plate */
+.glass-panel {
+  background: var(--surface-card);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-specular);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px -5px rgba(10, 25, 47, 0.04), 0 2px 6px -1px rgba(10, 25, 47, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel:hover {
+  background: var(--surface-card-hover);
+  box-shadow: 0 16px 36px -6px rgba(10, 25, 47, 0.08);
+}
+
+/* Monospace Tabular Figures */
+.tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Live Telemetry Pulse Animation */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.25); }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 2s infinite ease-in-out;
+}
+
+/* A4 Executive Landscape Print Layout */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  
+  body, .bg-mesh-pattern {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  .glass-panel {
+    background: #FFFFFF !important;
+    border: 1px solid #CBD5E1 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    page-break-inside: avoid;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}

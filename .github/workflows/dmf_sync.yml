@@ -1,0 +1,58 @@
+name: DMF Hydrocarbon Data Auto-Sync
+
+on:
+  schedule:
+    # Run daily at 04:00 UTC (11:00 AM Bangkok Time)
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: 'Force re-process all historical months'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Extract, Transform & Synchronize DMF Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install openpyxl pandas beautifulsoup4 requests urllib3
+
+      - name: Execute Headless ETL Pipeline
+        run: |
+          python .github/scripts/sync_dmf.py
+
+      - name: Commit & Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add data/ frontend/public/data/ output/ dmf_inventory_cache.json
+          
+          if git diff --staged --quiet; then
+            echo "No data changes detected. Everything is up to date."
+          else
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            git commit -m "[ETL] Auto-sync DMF Hydrocarbon Data - ${TIMESTAMP} [skip ci]"
+            git push origin main
+            echo "Successfully committed and pushed updated hydrocarbon data."
+          fi
