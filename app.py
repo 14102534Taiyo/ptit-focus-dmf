@@ -1435,9 +1435,17 @@ if 'df_flat_wide' not in st.session_state and os.path.exists(DEFAULT_OUTPUT_FILE
     try:
         df_loaded_prod = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Wide')
         st.session_state['df_flat_wide'] = inject_fang_to_dataframe(df_loaded_prod)
-        st.session_state['df_flat_long'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Long_Unpivoted')
     except Exception:
         pass
+
+    try:
+        st.session_state['df_flat_long'] = pd.read_excel(DEFAULT_OUTPUT_FILE, sheet_name='Flat_Long_Unpivoted')
+    except Exception:
+        if 'df_flat_wide' in st.session_state:
+            df_w = st.session_state['df_flat_wide']
+            id_cols = [c for c in ['พื้นที่', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ', 'ปี', 'เดือน', 'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา', 'PTIT_Region', 'PTIT_Operator_Field'] if c in df_w.columns]
+            val_cols = [c for c in ['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)', 'น้ำมันดิบ (บาร์เรล/วัน)', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'] if c in df_w.columns]
+            st.session_state['df_flat_long'] = pd.melt(df_w, id_vars=id_cols, value_vars=val_cols, var_name='ผลิตภัณฑ์ปิโตรเลียม', value_name='ปริมาณการผลิตต่อวัน')
 
 if 'df_sale_flat' not in st.session_state and os.path.exists(DEFAULT_SALE_OUTPUT_FILE):
     try:
@@ -2791,7 +2799,13 @@ def render_production_converter():
     # Display Results if Available
     if 'df_flat_wide' in st.session_state:
         df_wide = st.session_state['df_flat_wide']
-        df_long = st.session_state['df_flat_long']
+        if 'df_flat_long' in st.session_state:
+            df_long = st.session_state['df_flat_long']
+        else:
+            id_cols = [c for c in ['พื้นที่', 'แปลง_ไฟล์ดิบ', 'แหล่ง_ไฟล์ดิบ', 'ปี', 'เดือน', 'ผู้ดำเนินการ', 'แอ่งปิโตรเลียม', 'ประเภทสัญญา', 'PTIT_Region', 'PTIT_Operator_Field'] if c in df_wide.columns]
+            val_cols = [c for c in ['ก๊าซธรรมชาติ (ล้านลบ.ฟุต/วัน)', 'ก๊าซธรรมชาติเหลว (บาร์เรล/วัน)', 'น้ำมันดิบ (บาร์เรล/วัน)', 'รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)'] if c in df_wide.columns]
+            df_long = pd.melt(df_wide, id_vars=id_cols, value_vars=val_cols, var_name='ผลิตภัณฑ์ปิโตรเลียม', value_name='ปริมาณการผลิตต่อวัน')
+            st.session_state['df_flat_long'] = df_long
         unmapped = st.session_state.get('unmapped', pd.DataFrame())
 
         if len(unmapped) > 0:
