@@ -55,6 +55,8 @@ FANG_MASTER_XLSX = REPO_ROOT / "fang_production_master.xlsx"
 # Output Locations
 DATA_DIR = REPO_ROOT / "data"
 FRONTEND_DATA_DIR = REPO_ROOT / "frontend" / "public" / "data"
+STANDALONE_PUBLIC_DATA_DIR = Path("D:/ptit-dashboard-next/public/data")
+STANDALONE_DATA_DIR = Path("D:/ptit-dashboard-next/data")
 EXCEL_OUTPUT_DIR = REPO_ROOT / "output"
 
 PRODUCTION_JSON = DATA_DIR / "production_master.json"
@@ -715,12 +717,19 @@ def run_etl():
             print(f"   [WARN] Could not write Sales Excel Flat: {ex}")
 
     # 4. Save JSON files
-    for target_dir in [DATA_DIR, FRONTEND_DATA_DIR]:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        with open(target_dir / "production_master.json", "w", encoding="utf-8") as f:
-            json.dump(prod_result, f, ensure_ascii=False, indent=2)
-        with open(target_dir / "sales_master.json", "w", encoding="utf-8") as f:
-            json.dump(sales_result, f, ensure_ascii=False, indent=2)
+    target_dirs = [DATA_DIR, FRONTEND_DATA_DIR]
+    if STANDALONE_PUBLIC_DATA_DIR.parent.parent.exists():
+        target_dirs.extend([STANDALONE_PUBLIC_DATA_DIR, STANDALONE_DATA_DIR])
+
+    for target_dir in target_dirs:
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            with open(target_dir / "production_master.json", "w", encoding="utf-8") as f:
+                json.dump(prod_result, f, ensure_ascii=False, indent=2)
+            with open(target_dir / "sales_master.json", "w", encoding="utf-8") as f:
+                json.dump(sales_result, f, ensure_ascii=False, indent=2)
+        except Exception as ex:
+            print(f"   [WARN] Could not write JSON to {target_dir}: {ex}")
 
     manifest = {
         'timestamp': datetime.datetime.now().isoformat(),
@@ -734,9 +743,12 @@ def run_etl():
         'checksum_sale': hashlib.md5(json.dumps(sales_result).encode('utf-8')).hexdigest()
     }
 
-    for target_dir in [DATA_DIR, FRONTEND_DATA_DIR]:
-        with open(target_dir / "sync_manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
+    for target_dir in target_dirs:
+        try:
+            with open(target_dir / "sync_manifest.json", "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+        except Exception as ex:
+            print(f"   [WARN] Could not write manifest to {target_dir}: {ex}")
 
     print(f"[SUCCESS] ETL Pipeline completed in {manifest['execution_duration_sec']}s!")
     print(f"   Production Records: {manifest['production_records']}")

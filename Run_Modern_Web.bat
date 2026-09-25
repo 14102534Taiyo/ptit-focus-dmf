@@ -1,9 +1,13 @@
 @echo off
-cd /d "%~dp0\frontend"
+if exist "D:\ptit-dashboard-next" (
+    cd /d "D:\ptit-dashboard-next"
+) else (
+    cd /d "%~dp0\frontend"
+)
 echo ===================================================================
 echo   PTIT Focus Statistics - Siam Hydrocarbon Intelligence
 echo   Next.js Modern Web Portal (Sovereign Executive UI)
-echo   Decoupled GitHub Actions ETL Pipeline ^& Zero-Latency Static Data
+echo   Project Location: D:\ptit-dashboard-next
 echo ===================================================================
 echo.
 echo Starting Modern Web Application on http://localhost:3000 ...
