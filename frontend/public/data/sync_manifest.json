@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-10-08T11:11:54.896670",
-  "execution_duration_sec": 39.28,
+  "timestamp": "2026-10-09T11:10:59.174991",
+  "execution_duration_sec": 37.28,
   "status": "success",
   "is_live_dmf": true,
   "production_records": 278,
   "sales_records": 491,
   "latest_production_month": "สิงหาคม",
-  "checksum_prod": "382d6768e443f77c861e43391904ec48",
-  "checksum_sale": "0fee4bdc4294bd28ea2e8d670a5d2883"
+  "checksum_prod": "25340ff1306eab6dd0f66f9c890bc3b0",
+  "checksum_sale": "0ae341e8009b6020566d9f3abd20b33d"
 }
