@@ -52,6 +52,12 @@
   "sales": [
     {
       "year_ce": 2026,
+      "month": 8,
+      "month_name": "สิงหาคม",
+      "label": "สิงหาคม 2026"
+    },
+    {
+      "year_ce": 2026,
       "month": 7,
       "month_name": "กรกฎาคม",
       "label": "กรกฎาคม 2026"
