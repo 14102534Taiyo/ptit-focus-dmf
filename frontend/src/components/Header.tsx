@@ -6,6 +6,7 @@ import { SyncManifest } from "@/types/hydrocarbon";
 
 interface HeaderProps {
   manifest?: SyncManifest | null;
+  latestProductionYearBE: number;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   unitMode: "rate" | "boed";
@@ -16,6 +17,7 @@ interface HeaderProps {
 
 export function Header({
   manifest,
+  latestProductionYearBE,
   activeTab,
   setActiveTab,
   unitMode,
@@ -23,16 +25,6 @@ export function Header({
   theme,
   setTheme,
 }: HeaderProps) {
-  const syncDate = manifest?.timestamp
-    ? new Date(manifest.timestamp).toLocaleDateString("th-TH", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "อัปเดตล่าสุด: ส.ค. 2569";
-
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl bg-white/85 dark:bg-slate-950/85 mb-6 shadow-sm no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
@@ -66,7 +58,9 @@ export function Header({
                 DMF Portal:
               </span>
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                {manifest?.latest_production_month || "สิงหาคม"} 2569 (ซิงค์แล้ว)
+                {manifest?.latest_production_month
+                  ? `${manifest.latest_production_month} ${latestProductionYearBE} (ซิงค์แล้ว)`
+                  : "ยังไม่มีข้อมูล"}
               </span>
             </div>
 
@@ -116,7 +110,7 @@ export function Header({
         </div>
 
         {/* Executive Navigation Tabs */}
-        <nav className="flex space-x-2 mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 overflow-x-auto no-scrollbar">
+        <nav className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-200/60 pt-3 dark:border-slate-800/60 md:flex md:space-x-2 md:gap-0">
           {[
             { id: "production", label: "สถิติการผลิตในประเทศ (Production)", icon: Layers },
             { id: "sales", label: "ยอดจำหน่ายและค่าภาคหลวง (Sales & Royalty)", icon: Database },
@@ -129,7 +123,7 @@ export function Header({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`inline-flex min-h-11 items-center space-x-2 rounded-xl px-3 py-2 text-left text-xs font-semibold leading-tight transition-all md:px-3.5 md:whitespace-nowrap ${
                   isActive
                     ? "bg-sky-600 text-white shadow-sm shadow-sky-600/30"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900"

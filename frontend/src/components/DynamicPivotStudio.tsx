@@ -18,6 +18,7 @@ const METRIC_OPTIONS = [
 ];
 
 const DIMENSION_OPTIONS = [
+  { key: "แหล่ง_ไฟล์ดิบ", label: "ชื่อแหล่งผลิต (Field)" },
   { key: "ผู้ดำเนินการ", label: "ผู้ดำเนินการ (Operator)" },
   { key: "แอ่งปิโตรเลียม", label: "แอ่งปิโตรเลียม (Basin)" },
   { key: "ประเภทสัญญา", label: "ประเภทสัญญา (Contract Type)" },
@@ -27,19 +28,24 @@ const DIMENSION_OPTIONS = [
 
 const MONTH_ORDER = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน",
-  "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม"
+  "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม",
+  "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 ];
 
 export function DynamicPivotStudio({ records }: DynamicPivotStudioProps) {
-  const [rowDimension, setRowDimension] = useState<string>("ผู้ดำเนินการ");
+  const [rowDimension, setRowDimension] = useState<string>("แหล่ง_ไฟล์ดิบ");
   const [metricKey, setMetricKey] = useState<string>("รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)");
   const [searchFilter, setSearchFilter] = useState<string>("");
+  const reportYear = Number(records[0]?.ปี) || 2569;
 
   // Build Pivot Table
   const { pivotRows, uniqueMonths, grandTotalRow, columnTotals } = useMemo(() => {
     const pivotMap: Record<string, Record<string, number>> = {};
     const colTotals: Record<string, number> = {};
-    MONTH_ORDER.forEach((m) => (colTotals[m] = 0));
+    const activeMonths = MONTH_ORDER.filter((month) =>
+      records.some((record) => record.เดือน === month),
+    );
+    activeMonths.forEach((m) => (colTotals[m] = 0));
     let grandSum = 0;
 
     records.forEach((r) => {
@@ -49,7 +55,7 @@ export function DynamicPivotStudio({ records }: DynamicPivotStudioProps) {
 
       if (!pivotMap[dimVal]) {
         pivotMap[dimVal] = {};
-        MONTH_ORDER.forEach((m) => (pivotMap[dimVal][m] = 0));
+        activeMonths.forEach((m) => (pivotMap[dimVal][m] = 0));
       }
 
       if (pivotMap[dimVal][month] !== undefined) {
@@ -62,7 +68,7 @@ export function DynamicPivotStudio({ records }: DynamicPivotStudioProps) {
     // Filter by search
     let rows = Object.entries(pivotMap).map(([rowKey, monthVals]) => {
       const rowSum = Object.values(monthVals).reduce((a, b) => a + b, 0);
-      const rowAvg = rowSum / (MONTH_ORDER.length || 1);
+      const rowAvg = rowSum / (activeMonths.length || 1);
       return {
         rowKey,
         monthVals,
@@ -81,7 +87,7 @@ export function DynamicPivotStudio({ records }: DynamicPivotStudioProps) {
 
     return {
       pivotRows: rows,
-      uniqueMonths: MONTH_ORDER,
+      uniqueMonths: activeMonths,
       grandTotalRow: grandSum,
       columnTotals: colTotals,
     };
@@ -115,7 +121,7 @@ export function DynamicPivotStudio({ records }: DynamicPivotStudioProps) {
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Pivot_Summary");
-    XLSX.writeFile(wb, `PTIT_Pivot_${rowDimension}_2569.xlsx`);
+    XLSX.writeFile(wb, `PTIT_Pivot_${rowDimension}_${reportYear}.xlsx`);
   };
 
   return (

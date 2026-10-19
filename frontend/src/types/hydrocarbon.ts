@@ -25,7 +25,9 @@ export interface ProductionRecord {
 
 export interface MatrixRow {
   PTIT_Region: string;
-  PTIT_Operator_Field: string;
+  PTIT_Field_Name: string;
+  PTIT_Concession: string;
+  PTIT_Operator: string;
   PTIT_Order: number;
   [monthOrStat: string]: any;
 }
