@@ -38,6 +38,11 @@ jobs:
           pip install openpyxl pandas beautifulsoup4 requests urllib3
 
       - name: Execute Headless ETL Pipeline
+        # First run (or force_refresh) downloads every year DMF publishes; later runs only
+        # re-download the latest two years plus any month missing from data/cache/.
+        timeout-minutes: 120
+        env:
+          FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
         run: |
           python .github/scripts/sync_dmf.py
 

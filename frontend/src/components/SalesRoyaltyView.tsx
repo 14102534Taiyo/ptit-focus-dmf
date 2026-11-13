@@ -6,6 +6,7 @@ import { SalesMasterData } from "@/types/hydrocarbon";
 import { formatNumber } from "@/lib/utils";
 import { ReportingPeriod, THAI_MONTHS } from "@/lib/reporting";
 import { ReportingPeriodControls } from "@/components/ReportingPeriodControls";
+import { YearLoadStatus } from "@/components/YearLoadStatus";
 import { SalesVolumeSummary } from "@/components/SalesVolumeSummary";
 import { summarizeSalesVolumes } from "@/lib/sales-reporting";
 import * as XLSX from "xlsx";
@@ -27,19 +28,30 @@ const THAI_SHORT_MONTHS: Record<string, string> = {
 
 interface SalesRoyaltyViewProps {
   salesData: SalesMasterData;
+  /** Every year DMF publishes (from years_index.json); falls back to years present in data. */
+  availableYears?: number[];
+  onYearSelected?: (year: number) => void;
+  loadingYear?: number | null;
+  errorYear?: number | null;
 }
 
-export function SalesRoyaltyView({ salesData }: SalesRoyaltyViewProps) {
+export function SalesRoyaltyView({
+  salesData,
+  availableYears,
+  onYearSelected,
+  loadingYear,
+  errorYear,
+}: SalesRoyaltyViewProps) {
   const [selectedProduct, setSelectedProduct] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const availableYears = useMemo(
-    () =>
-      Array.from(new Set(salesData.flat_records.map((record) => Number(record.ปี))))
-        .filter(Number.isFinite)
-        .sort((a, b) => b - a),
-    [salesData.flat_records],
-  );
-  const [yearBE, setYearBE] = useState(availableYears[0] || 2569);
+  const yearOptions = useMemo(() => {
+    const years = new Set(availableYears || []);
+    salesData.flat_records.forEach((record) => years.add(Number(record.ปี)));
+    return Array.from(years).filter(Number.isFinite).sort((a, b) => b - a);
+  }, [availableYears, salesData.flat_records]);
+  // Default to the bundled (latest) year so the first paint needs no fetch
+  const bundledYear = Number(salesData.flat_records[0]?.ปี) || yearOptions[0] || 2569;
+  const [yearBE, setYearBE] = useState(bundledYear);
   const [period, setPeriod] = useState<ReportingPeriod>("annual");
   const [month, setMonth] = useState("");
 
@@ -220,14 +232,25 @@ export function SalesRoyaltyView({ salesData }: SalesRoyaltyViewProps) {
         setYearBE={(year) => {
           setYearBE(year);
           setSelectedProduct("all");
+          onYearSelected?.(year);
         }}
-        yearsBE={availableYears}
+        yearsBE={yearOptions}
         month={selectedMonth}
         setMonth={setMonth}
         months={months}
         latestMonth={months[months.length - 1] || "-"}
       />
 
+      <YearLoadStatus
+        yearBE={yearBE}
+        loadingYear={loadingYear}
+        errorYear={errorYear}
+        onRetry={onYearSelected}
+      />
+
+      {/* Historical years arrive asynchronously; render the report once the year has data */}
+      {months.length > 0 && (
+      <>
       {/* 4-Tier Fiscal Bento KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* Total Sales Value */}
@@ -480,6 +503,8 @@ export function SalesRoyaltyView({ salesData }: SalesRoyaltyViewProps) {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

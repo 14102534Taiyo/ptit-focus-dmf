@@ -169,6 +169,62 @@ def get_dmf_online_inventory(timeout=8):
     inventory['sales'].sort(key=lambda x: (x['year_ce'], x['month']), reverse=True)
     return inventory
 
+PROD_INDEX_URL = "https://dmf.go.th/public/createpetroleum/data/index/menu/1114"
+SALE_INDEX_URL = "https://dmf.go.th/public/salevalue/data/index/menu/774"
+PROD_REPORT_RE = re.compile(r'/createpetroleum/data/report/menu/1114/year/(\d+)/month/(\d+)')
+SALE_REPORT_RE = re.compile(r'/salevalue/data/report/menu/774/year/(\d+)/month/(\d+)')
+
+
+def _fetch_soup(url, timeout):
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, context=CTX, timeout=timeout) as resp:
+        return BeautifulSoup(resp.read().decode('utf-8', errors='ignore'), 'html.parser')
+
+
+def _year_options(soup):
+    """ปีทั้งหมดที่ DMF มีให้เลือกในช่อง <select id="year">"""
+    sel = soup.find('select', id='year') or soup.find('select', attrs={'name': 'year'})
+    if not sel:
+        return []
+    return sorted({int(o['value']) for o in sel.find_all('option') if str(o.get('value', '')).isdigit()})
+
+
+def _months_in_page(soup, pattern, year):
+    months = set()
+    for a in soup.find_all('a', href=True):
+        m = pattern.search(a['href'])
+        if m and int(m.group(1)) == year:
+            months.add(int(m.group(2)))
+    return sorted(months)
+
+
+def get_dmf_all_years_inventory(timeout=15, delay_sec=0.3):
+    """
+    ไล่ดึงรายการเดือนที่ DMF เผยแพร่ของ "ทุกปี" ที่มีในเว็บ (ผลิต: ปี พ.ศ., จำหน่าย: ปี ค.ศ.)
+    คืนค่า {'production': [{'year_be','month'}], 'sales': [{'year_ce','month'}], 'is_live': bool,
+            'errors': [...]} — ปีที่ดึงไม่สำเร็จจะถูกบันทึกใน errors (ผู้เรียกควรใช้แคชเดิมของปีนั้น)
+    """
+    inventory = {'production': [], 'sales': [], 'is_live': False, 'errors': []}
+    for kind, base, pattern, ykey in [
+        ('production', PROD_INDEX_URL, PROD_REPORT_RE, 'year_be'),
+        ('sales', SALE_INDEX_URL, SALE_REPORT_RE, 'year_ce'),
+    ]:
+        try:
+            years = _year_options(_fetch_soup(f"{base}/groupid/1", timeout))
+        except Exception as e:
+            inventory['errors'].append(f"{kind} year list: {e}")
+            continue
+        for y in years:
+            try:
+                months = _months_in_page(_fetch_soup(f"{base}/year/{y}", timeout), pattern, y)
+                inventory[kind].extend({ykey: y, 'month': m} for m in months)
+                inventory['is_live'] = True
+            except Exception as e:
+                inventory['errors'].append(f"{kind} {y}: {e}")
+            time.sleep(delay_sec)
+    return inventory
+
+
 def stream_dmf_production_bytes(year_be, month_num, timeout=20):
     """
     ดึงไฟล์ Excel การผลิตจาก DMF เข้าสู่ io.BytesIO ใน RAM โดยตรง (ไม่เขียนไฟล์ลงดิสก์)

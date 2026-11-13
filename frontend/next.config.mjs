@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const isGithubPages = process.env.DEPLOY_TARGET === 'gh-pages';
+const basePath = isGithubPages ? '/ptit-focus-dmf' : '';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -7,7 +8,11 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
-  basePath: isGithubPages ? '/ptit-focus-dmf' : '',
+  // Exposed so runtime fetch() of per-year data files resolves under the Pages sub-path
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath
+  },
+  basePath,
   assetPrefix: isGithubPages ? '/ptit-focus-dmf/' : '',
   trailingSlash: true
 };

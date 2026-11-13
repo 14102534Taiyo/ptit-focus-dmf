@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { ProductionReportView } from "@/components/ProductionReportView";
 import { SalesRoyaltyView } from "@/components/SalesRoyaltyView";
@@ -11,16 +11,39 @@ import { SystemStatusView } from "@/components/SystemStatusView";
 import prodDataRaw from "../../public/data/production_master.json";
 import salesDataRaw from "../../public/data/sales_master.json";
 import manifestRaw from "../../public/data/sync_manifest.json";
-import { ProductionMasterData, SalesMasterData, SyncManifest } from "@/types/hydrocarbon";
+import yearsIndexRaw from "../../public/data/years_index.json";
+import {
+  ProductionMasterData,
+  ProductionRecord,
+  SalesMasterData,
+  SalesRecord,
+  SyncManifest,
+} from "@/types/hydrocarbon";
+import { YearsIndex, useYearRecords, yearsFromIndex } from "@/lib/year-data";
+
+const prodBase = prodDataRaw as unknown as ProductionMasterData;
+const salesBase = salesDataRaw as unknown as SalesMasterData;
+const manifest = manifestRaw as unknown as SyncManifest;
+const yearsIndex = yearsIndexRaw as unknown as YearsIndex;
+const productionYears = yearsFromIndex(yearsIndex, "production");
+const salesYears = yearsFromIndex(yearsIndex, "sales");
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("production");
   const [unitMode, setUnitMode] = useState<"rate" | "boed">("rate");
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  const prodData = prodDataRaw as unknown as ProductionMasterData;
-  const salesData = salesDataRaw as unknown as SalesMasterData;
-  const manifest = manifestRaw as unknown as SyncManifest;
+  // Latest year ships in the bundle; older years are fetched when selected
+  const prodYears = useYearRecords<ProductionRecord>("production", prodBase.flat_records);
+  const saleYears = useYearRecords<SalesRecord>("sales", salesBase.flat_records);
+  const prodData = useMemo(
+    () => ({ ...prodBase, flat_records: prodYears.records }),
+    [prodYears.records],
+  );
+  const salesData = useMemo(
+    () => ({ ...salesBase, flat_records: saleYears.records }),
+    [saleYears.records],
+  );
 
   // Sync theme with HTML document class
   useEffect(() => {
@@ -48,12 +71,25 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Tab 1: Production Intelligence */}
         {activeTab === "production" && (
-          <ProductionReportView data={prodData} unitMode={unitMode} />
+          <ProductionReportView
+            data={prodData}
+            unitMode={unitMode}
+            availableYears={productionYears}
+            onYearSelected={prodYears.ensureYear}
+            loadingYear={prodYears.loadingYear}
+            errorYear={prodYears.errorYear}
+          />
         )}
 
         {/* Tab 2: Sales & Royalty Intelligence */}
         {activeTab === "sales" && (
-          <SalesRoyaltyView salesData={salesData} />
+          <SalesRoyaltyView
+            salesData={salesData}
+            availableYears={salesYears}
+            onYearSelected={saleYears.ensureYear}
+            loadingYear={saleYears.loadingYear}
+            errorYear={saleYears.errorYear}
+          />
         )}
 
         {/* Tab 3: Petroleum Unit Converter Hub */}

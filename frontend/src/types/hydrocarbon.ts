@@ -127,6 +127,10 @@ export interface SyncManifest {
   production_records: number;
   sales_records: number;
   latest_production_month: string;
+  production_years?: number;
+  sales_years?: number;
+  production_records_all_years?: number;
+  sales_records_all_years?: number;
   checksum_prod: string;
   checksum_sale: string;
 }

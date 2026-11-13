@@ -19,6 +19,13 @@
 3. **ระบบ 1-Click Auto Sync (In-Memory Stream):**
    - ตรวจจับเดือนใหม่และดึงข้อมูลสดจากเว็บไซต์กรมเชื้อเพลิงธรรมชาติ (dmf.go.th) เข้าสู่หน่วยความจำ RAM โดยตรง
    - คำนวณและปรับปรุงตัวเลขย้อนหลังอัตโนมัติ (Retroactive Adjustments)
+   - **ซิงก์ทุกปีที่ DMF เผยแพร่** (การผลิตตั้งแต่ปี 2546, การจำหน่ายตั้งแต่ปี 2003) ผ่าน GitHub Actions ทุกวัน
+     - เก็บข้อมูลที่แปลงแล้วแยกรายปีไว้ที่ `data/cache/production/<ปี พ.ศ.>.json` และ `data/cache/sales/<ปี พ.ศ.>.json`
+     - แต่ละรอบจะดาวน์โหลดใหม่เฉพาะปีล่าสุดและปีก่อนหน้า (เผื่อ DMF แก้ตัวเลขย้อนหลัง) และเดือนที่ยังไม่มีในแคช
+     - ถ้าต้องการดาวน์โหลดใหม่ทุกปี ให้รัน workflow ด้วยตัวเลือก `force_refresh` หรือตั้ง `FORCE_REFRESH=1` ตอนรัน `python .github/scripts/sync_dmf.py`
+     - หน้าเว็บโหลดปีล่าสุดมาก่อน ส่วนปีอื่นจะโหลดจาก `frontend/public/data/<production|sales>/<ปี>.json` เมื่อเลือกปีนั้น
+     - ตาราง Excel รวมทุกปีอยู่ที่ `output/petroleum_production_flat_table_all_years.xlsx` และ `output/petroleum_sale_flat_table_all_years.xlsx`
+     - ข้อมูลน้ำมันดิบแหล่งฝาง (DEDP) รวมเฉพาะปีที่มีค่าใน `fang_production_master.*`
 4. **มาตรฐานรายงาน PTIT (Domestic Production Report):**
    - ส่งออกรายงานการผลิตในประเทศรูปแบบทางการตามมาตรฐานสิ่งพิมพ์ PTIT (.xlsx)
 

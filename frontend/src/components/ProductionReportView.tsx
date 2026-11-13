@@ -12,21 +12,36 @@ import { ProductionPeriodTable } from "@/components/ProductionPeriodTable";
 import { ProductionTrendCharts } from "@/components/ProductionTrendCharts";
 import { ProductionKpiOverview } from "@/components/ProductionKpiOverview";
 import { ReportingPeriodControls } from "@/components/ReportingPeriodControls";
+import { YearLoadStatus } from "@/components/YearLoadStatus";
 
 interface ProductionReportViewProps {
   data: ProductionMasterData;
   unitMode: "rate" | "boed";
+  /** Every year DMF publishes (from years_index.json); falls back to years present in data. */
+  availableYears?: number[];
+  onYearSelected?: (year: number) => void;
+  loadingYear?: number | null;
+  errorYear?: number | null;
 }
 
-export function ProductionReportView({ data, unitMode }: ProductionReportViewProps) {
-  const yearsBE = useMemo(
-    () =>
-      Array.from(new Set(data.flat_records.map((record) => Number(record.ปี))))
-        .filter(Number.isFinite)
-        .sort((a, b) => b - a),
-    [data.flat_records],
-  );
-  const [yearBE, setYearBE] = useState(yearsBE[0] || data.kpis.reporting_year_be);
+export function ProductionReportView({
+  data,
+  unitMode,
+  availableYears,
+  onYearSelected,
+  loadingYear,
+  errorYear,
+}: ProductionReportViewProps) {
+  const yearsBE = useMemo(() => {
+    const years = new Set(availableYears || []);
+    data.flat_records.forEach((record) => years.add(Number(record.ปี)));
+    return Array.from(years).filter(Number.isFinite).sort((a, b) => b - a);
+  }, [availableYears, data.flat_records]);
+  const [yearBE, setYearBEState] = useState(data.kpis.reporting_year_be || yearsBE[0]);
+  const setYearBE = (year: number) => {
+    setYearBEState(year);
+    onYearSelected?.(year);
+  };
   const [period, setPeriod] = useState<ReportingPeriod>("annual");
   const [month, setMonth] = useState(data.kpis.latest_month);
 
@@ -74,28 +89,40 @@ export function ProductionReportView({ data, unitMode }: ProductionReportViewPro
         latestMonth={months[months.length - 1] || "-"}
       />
 
-      <ProductionKpiOverview
-        summary={summary}
-        period={period}
-        month={selectedMonth}
+      <YearLoadStatus
         yearBE={yearBE}
-        unitMode={unitMode}
+        loadingYear={loadingYear}
+        errorYear={errorYear}
+        onRetry={onYearSelected}
       />
 
-      <ProductionTrendCharts
-        data={data}
-        yearBE={yearBE}
-        selectedMonth={selectedMonth}
-      />
+      {/* Historical years arrive asynchronously; charts need at least one month to draw */}
+      {months.length > 0 && (
+        <>
+          <ProductionKpiOverview
+            summary={summary}
+            period={period}
+            month={selectedMonth}
+            yearBE={yearBE}
+            unitMode={unitMode}
+          />
 
-      <ProductionPeriodTable
-        data={data}
-        yearBE={yearBE}
-        period={period}
-        selectedMonth={selectedMonth}
-      />
+          <ProductionTrendCharts
+            data={data}
+            yearBE={yearBE}
+            selectedMonth={selectedMonth}
+          />
 
-      <DynamicPivotStudio records={summary.records} />
+          <ProductionPeriodTable
+            data={data}
+            yearBE={yearBE}
+            period={period}
+            selectedMonth={selectedMonth}
+          />
+
+          <DynamicPivotStudio records={summary.records} />
+        </>
+      )}
     </div>
   );
 }
