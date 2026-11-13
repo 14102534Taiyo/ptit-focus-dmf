@@ -8,6 +8,7 @@ import { PetroleumUnitConverter } from "@/components/PetroleumUnitConverter";
 import { SystemStatusView } from "@/components/SystemStatusView";
 import { FieldTrackerView } from "@/components/FieldTrackerView";
 import { MappingEditorView } from "@/components/MappingEditorView";
+import { AnalystStudioView } from "@/components/AnalystStudioView";
 
 // Import pre-aggregated JSON datasets
 import prodDataRaw from "../../public/data/production_master.json";
@@ -41,6 +42,8 @@ export default function Home() {
   // A shared "my groups" link lands straight on the field tracker
   useEffect(() => {
     if (window.location.hash.includes("groups=")) setActiveTab("tracker");
+    // A shared analysis link lands on the analyst studio
+    if (window.location.hash.includes("studio=")) setActiveTab("studio");
   }, []);
 
   // Latest year ships in the bundle; older years are fetched when selected
@@ -88,6 +91,19 @@ export default function Home() {
             onYearSelected={prodYears.ensureYear}
             loadingYear={prodYears.loadingYear}
             errorYear={prodYears.errorYear}
+          />
+        )}
+
+        {/* Analyst studio: pick fields, group them, monthly / annual pivots */}
+        {activeTab === "studio" && (
+          <AnalystStudioView
+            records={prodYears.records}
+            monthsIndex={yearsIndex.production}
+            ensureYears={prodYears.ensureYears}
+            loadedYears={prodYears.loadedYears}
+            pendingCount={prodYears.pendingCount}
+            theme={theme}
+            mappingRows={fieldGroups.rows}
           />
         )}
 

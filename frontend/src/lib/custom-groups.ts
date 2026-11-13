@@ -46,14 +46,14 @@ export function newGroupId() {
   return `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function toBase64Url(text: string) {
+export function toBase64Url(text: string) {
   const bytes = new TextEncoder().encode(text);
   let binary = "";
   bytes.forEach((b) => (binary += String.fromCharCode(b)));
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(text: string) {
+export function fromBase64Url(text: string) {
   const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(base64 + "===".slice((base64.length + 3) % 4));
   return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));

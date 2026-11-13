@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, Printer, RefreshCw, Layers, Database, LineChart, GitMerge } from "lucide-react";
+import { ShieldCheck, Printer, RefreshCw, Layers, Database, LineChart, GitMerge, TableProperties } from "lucide-react";
 import { SyncManifest } from "@/types/hydrocarbon";
 
 interface HeaderProps {
@@ -113,6 +113,7 @@ export function Header({
         <nav className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-200/60 pt-3 dark:border-slate-800/60 md:flex md:flex-wrap md:gap-2">
           {[
             { id: "production", label: "สถิติการผลิตในประเทศ (Production)", icon: Layers },
+            { id: "studio", label: "ห้องวิเคราะห์ (จัดกลุ่มเอง)", icon: TableProperties },
             { id: "tracker", label: "ติดตามรายแหล่ง (Field Tracker)", icon: LineChart },
             { id: "sales", label: "ยอดจำหน่ายและค่าภาคหลวง (Sales & Royalty)", icon: Database },
             { id: "converter", label: "แปลงหน่วยพลังงานมาตรฐาน PTIT", icon: RefreshCw },
