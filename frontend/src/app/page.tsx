@@ -6,6 +6,7 @@ import { ProductionReportView } from "@/components/ProductionReportView";
 import { SalesRoyaltyView } from "@/components/SalesRoyaltyView";
 import { PetroleumUnitConverter } from "@/components/PetroleumUnitConverter";
 import { SystemStatusView } from "@/components/SystemStatusView";
+import { FieldTrackerView } from "@/components/FieldTrackerView";
 
 // Import pre-aggregated JSON datasets
 import prodDataRaw from "../../public/data/production_master.json";
@@ -78,6 +79,18 @@ export default function Home() {
             onYearSelected={prodYears.ensureYear}
             loadingYear={prodYears.loadingYear}
             errorYear={prodYears.errorYear}
+          />
+        )}
+
+        {/* Multi-year field tracker */}
+        {activeTab === "tracker" && (
+          <FieldTrackerView
+            records={prodYears.records}
+            monthsIndex={yearsIndex.production}
+            ensureYears={prodYears.ensureYears}
+            loadedYears={prodYears.loadedYears}
+            pendingCount={prodYears.pendingCount}
+            theme={theme}
           />
         )}
 

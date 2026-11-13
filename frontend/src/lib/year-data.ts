@@ -75,10 +75,32 @@ export function useYearRecords<T extends { ปี: number | string }>(
     [kind],
   );
 
+  const [pendingCount, setPendingCount] = useState(0);
+
+  /** Fetch several years in parallel (used by the multi-year field tracker). */
+  const ensureYears = useCallback(
+    async (years: number[]) => {
+      const missing = years.filter((year) => !requested.current.has(year));
+      if (missing.length === 0) return;
+      setPendingCount((count) => count + missing.length);
+      await Promise.all(
+        missing.map((year) =>
+          ensureYear(year).finally(() => setPendingCount((count) => count - 1)),
+        ),
+      );
+    },
+    [ensureYear],
+  );
+
   const records = useMemo(
     () => initialRecords.concat(...Object.values(extraRecords)),
     [initialRecords, extraRecords],
   );
 
-  return { records, ensureYear, loadingYear, errorYear };
+  const loadedYears = useMemo(
+    () => new Set([...initialYears, ...Object.keys(extraRecords).map(Number)]),
+    [initialYears, extraRecords],
+  );
+
+  return { records, ensureYear, ensureYears, loadedYears, pendingCount, loadingYear, errorYear };
 }
