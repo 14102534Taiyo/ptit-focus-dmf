@@ -7,6 +7,7 @@ import { SalesRoyaltyView } from "@/components/SalesRoyaltyView";
 import { PetroleumUnitConverter } from "@/components/PetroleumUnitConverter";
 import { SystemStatusView } from "@/components/SystemStatusView";
 import { FieldTrackerView } from "@/components/FieldTrackerView";
+import { MappingEditorView } from "@/components/MappingEditorView";
 
 // Import pre-aggregated JSON datasets
 import prodDataRaw from "../../public/data/production_master.json";
@@ -36,6 +37,11 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("production");
   const [unitMode, setUnitMode] = useState<"rate" | "boed">("rate");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  // A shared "my groups" link lands straight on the field tracker
+  useEffect(() => {
+    if (window.location.hash.includes("groups=")) setActiveTab("tracker");
+  }, []);
 
   // Latest year ships in the bundle; older years are fetched when selected
   const prodYears = useYearRecords<ProductionRecord>("production", prodBase.flat_records);
@@ -98,6 +104,9 @@ export default function Home() {
             mappingGenerated={fieldGroups.generated}
           />
         )}
+
+        {/* Official field mapping editor (admins, commits to GitHub) */}
+        {activeTab === "mapping" && <MappingEditorView rows={fieldGroups.rows} />}
 
         {/* Tab 2: Sales & Royalty Intelligence */}
         {activeTab === "sales" && (

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Plus, Search, X } from "lucide-react";
+import { Download, Link2, Loader2, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ProductionRecord } from "@/types/hydrocarbon";
 import {
@@ -15,9 +15,22 @@ import {
   fieldKey,
   groupedKeyFn,
   monthlySeries,
+  monthlySeriesWhere,
 } from "@/lib/field-tracker";
 import { FieldTrendChart, TrendPoint } from "@/components/FieldTrendChart";
 import { FieldMappingReference } from "@/components/FieldMappingReference";
+import { CustomGroupBuilder, FieldOption } from "@/components/CustomGroupBuilder";
+import {
+  CustomGroup,
+  clearHash,
+  groupsFromHash,
+  loadCustomGroups,
+  sameGroup,
+  saveCustomGroups,
+  shareLink,
+} from "@/lib/custom-groups";
+
+const CUSTOM_PREFIX = "custom:";
 import { formatInteger, formatNumber } from "@/lib/utils";
 
 // Categorical slots 1–4 (validated light/dark steps); color follows the field, never its rank
@@ -77,8 +90,68 @@ export function FieldTrackerView({
 
   const toggleGroups = (value: boolean) => {
     setUseGroups(value);
-    setSelected([]);
+    setSelected((current) => current.filter((id) => id.startsWith(CUSTOM_PREFIX)));
     setNeedsDefault(true);
+  };
+
+  // ---- Viewer's own groups (browser-only, shareable by link) ----
+  const [customGroups, setCustomGroups] = useState<CustomGroup[]>([]);
+  const [builder, setBuilder] = useState<{ open: boolean; editing?: CustomGroup }>({ open: false });
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pendingSelect, setPendingSelect] = useState<string[]>([]);
+
+  useEffect(() => {
+    const stored = loadCustomGroups();
+    const shared = groupsFromHash();
+    const incoming = shared.filter((g) => !stored.some((s) => sameGroup(s, g)));
+    const merged = [...stored, ...incoming];
+    setCustomGroups(merged);
+    if (shared.length > 0) {
+      saveCustomGroups(merged);
+      clearHash();
+      setNotice(`เพิ่ม ${incoming.length} กลุ่มจากลิงก์ที่แชร์มาแล้ว (เก็บไว้ในเบราว์เซอร์นี้)`);
+      const shown = shared.map((g) => (merged.find((m) => sameGroup(m, g)) as CustomGroup).id);
+      setPendingSelect(shown.slice(0, MAX_FIELDS).map((id) => `${CUSTOM_PREFIX}${id}`));
+    }
+  }, []);
+
+  const persistGroups = (groups: CustomGroup[]) => {
+    setCustomGroups(groups);
+    saveCustomGroups(groups);
+  };
+
+  const fieldOptions: FieldOption[] = useMemo(
+    () =>
+      mappingRows
+        .map((r) => ({ name: r.แหล่ง_ไฟล์ดิบ, years: r.ปีที่พบในข้อมูล, blocks: r.แปลงที่พบ, area: r.พื้นที่ }))
+        .sort((a, b) => a.name.localeCompare(b.name, "th")),
+    [mappingRows],
+  );
+
+  const customById = useMemo(() => new Map(customGroups.map((g) => [`${CUSTOM_PREFIX}${g.id}`, g])), [customGroups]);
+  const labelOf = (id: string) => (customById.get(id) ? `★ ${customById.get(id)!.name}` : id);
+
+  const saveGroup = (group: CustomGroup) => {
+    const exists = customGroups.some((g) => g.id === group.id);
+    persistGroups(exists ? customGroups.map((g) => (g.id === group.id ? group : g)) : [...customGroups, group]);
+    setBuilder({ open: false });
+    if (!exists) addField(`${CUSTOM_PREFIX}${group.id}`);
+  };
+
+  const deleteGroup = (group: CustomGroup) => {
+    if (!window.confirm(`ลบกลุ่ม "${group.name}" ออกจากเบราว์เซอร์นี้?`)) return;
+    persistGroups(customGroups.filter((g) => g.id !== group.id));
+    setSelected((current) => current.filter((id) => id !== `${CUSTOM_PREFIX}${group.id}`));
+  };
+
+  const copyShareLink = async () => {
+    const link = shareLink(customGroups);
+    try {
+      await navigator.clipboard.writeText(link);
+      setNotice("คัดลอกลิงก์แล้ว — คนที่เปิดลิงก์จะได้กลุ่มของคุณไปไว้ในเบราว์เซอร์ของเขา");
+    } catch {
+      window.prompt("คัดลอกลิงก์นี้เพื่อแชร์กลุ่มของคุณ:", link);
+    }
   };
 
   const rangeYears = useMemo(() => years.filter((y) => y >= fromYear && y <= toYear), [years, fromYear, toYear]);
@@ -103,14 +176,21 @@ export function FieldTrackerView({
   const removeField = (name: string) => setSelected((current) => current.filter((f) => f !== name));
 
   // Start with the three largest fields of the range so the page is never empty
+  // (or with the groups that arrived through a shared link)
   useEffect(() => {
     if (needsDefault && catalog.length > 0) {
-      const initial = catalog.slice(0, 3).map((f) => f.name);
+      const keep = selected.filter((id) => id.startsWith(CUSTOM_PREFIX));
+      const initial =
+        pendingSelect.length > 0
+          ? pendingSelect
+          : [...keep, ...catalog.slice(0, Math.max(0, 3 - keep.length)).map((f) => f.name)].slice(0, MAX_FIELDS);
       setSlots(Object.fromEntries(initial.map((name, index) => [name, index])));
       setSelected(initial);
+      setPendingSelect([]);
       setNeedsDefault(false);
     }
-  }, [needsDefault, catalog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsDefault, catalog, pendingSelect]);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -127,11 +207,18 @@ export function FieldTrackerView({
 
   const fieldSeries = useMemo(
     () =>
-      selected.map((name) => {
-        const monthly = monthlySeries(records, name, timeline, metric, keyOf);
-        return { name, color: palette[slots[name] ?? 0], monthly, annual: annualSeries(monthly, timeline) };
-      }),
-    [selected, records, timeline, metric, palette, slots, keyOf],
+      selected
+        .filter((id) => !id.startsWith(CUSTOM_PREFIX) || customById.has(id))
+        .map((id) => {
+          const custom = customById.get(id);
+          const members = custom ? new Set(custom.members) : null;
+          const monthly = members
+            ? monthlySeriesWhere(records, (record) => members.has(fieldKey(record)), timeline, metric)
+            : monthlySeries(records, id, timeline, metric, keyOf);
+          return { id, name: labelOf(id), color: palette[slots[id] ?? 0], monthly, annual: annualSeries(monthly, timeline) };
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, records, timeline, metric, palette, slots, keyOf, customById],
   );
 
   const chartPoints: TrendPoint[] =
@@ -239,27 +326,31 @@ export function FieldTrackerView({
       {/* Field picker */}
       <section aria-label="เลือกแหล่งผลิต" className="glass-panel space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {fieldSeries.map((s) => (
+          {fieldSeries.map((s) => {
+            const custom = customById.get(s.id);
+            const memberList = custom ? custom.members : isMergedGroup(s.id) ? groupMembers.get(s.id) : undefined;
+            return (
             <span
-              key={s.name}
-              title={isMergedGroup(s.name) ? `รวม: ${groupMembers.get(s.name)?.join(", ")}` : undefined}
+              key={s.id}
+              title={memberList ? `รวม: ${memberList.join(", ")}` : undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-1 text-sm font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             >
               <span aria-hidden="true" className="inline-block h-0.5 w-4 rounded" style={{ background: s.color }} />
               {s.name}
-              {isMergedGroup(s.name) && (
-                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">({groupMembers.get(s.name)?.length} ชื่อ)</span>
+              {memberList && (
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">({memberList.length} ชื่อ)</span>
               )}
               <button
                 type="button"
-                onClick={() => removeField(s.name)}
+                onClick={() => removeField(s.id)}
                 aria-label={`เอา ${s.name} ออก`}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
               >
                 <X aria-hidden="true" className="h-4 w-4" />
               </button>
             </span>
-          ))}
+            );
+          })}
           {selected.length === 0 && rangeLoaded && (
             <span className="text-sm text-slate-500 dark:text-slate-400">ยังไม่ได้เลือกแหล่งผลิต</span>
           )}
@@ -304,6 +395,94 @@ export function FieldTrackerView({
             )}
           </div>
         )}
+
+        {/* Viewer's own groups */}
+        <div className="space-y-3 border-t border-slate-200/80 pt-3 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-1.5 text-sm font-extrabold text-slate-900 dark:text-white">
+                <Star aria-hidden="true" className="h-4 w-4 text-amber-500" />
+                กลุ่มของฉัน
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                จับแหล่งใดก็ได้มารวมและตั้งชื่อเอง · เก็บไว้ในเบราว์เซอร์นี้เท่านั้น ไม่กระทบ Mapping ทางการ · แชร์ให้คนอื่นด้วยลิงก์
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {customGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={copyShareLink}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+                >
+                  <Link2 aria-hidden="true" className="h-4 w-4" />
+                  แชร์ลิงก์
+                </button>
+              )}
+              {!builder.open && (
+                <button
+                  type="button"
+                  onClick={() => setBuilder({ open: true })}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-sky-700 px-3 text-sm font-semibold text-white hover:bg-sky-800"
+                >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  สร้างกลุ่มใหม่
+                </button>
+              )}
+            </div>
+          </div>
+
+          {notice && (
+            <div role="status" className="flex items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+              {notice}
+              <button type="button" onClick={() => setNotice(null)} aria-label="ปิดข้อความ" className="rounded-full p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900">
+                <X aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {builder.open && (
+            <CustomGroupBuilder
+              options={fieldOptions}
+              initial={builder.editing}
+              existingNames={customGroups.map((g) => g.name)}
+              onSave={saveGroup}
+              onCancel={() => setBuilder({ open: false })}
+            />
+          )}
+
+          {customGroups.length > 0 ? (
+            <ul className="flex flex-wrap gap-2">
+              {customGroups.map((g) => {
+                const id = `${CUSTOM_PREFIX}${g.id}`;
+                const shown = selected.includes(id);
+                return (
+                  <li key={g.id} className="inline-flex min-h-11 items-center gap-1 rounded-full border border-amber-300 bg-amber-50/60 pl-3 pr-1 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+                    <button
+                      type="button"
+                      onClick={() => (shown ? removeField(id) : addField(id))}
+                      disabled={!shown && selected.length >= MAX_FIELDS}
+                      aria-pressed={shown}
+                      title={`${shown ? "ซ่อนจากกราฟ" : "แสดงในกราฟ"} · รวม: ${g.members.join(", ")}`}
+                      className="font-semibold text-slate-800 disabled:opacity-50 dark:text-slate-100"
+                    >
+                      {shown ? "✓ " : "+ "}★ {g.name}
+                      <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">({g.members.length} แหล่ง)</span>
+                    </button>
+                    <button type="button" onClick={() => setBuilder({ open: true, editing: g })} aria-label={`แก้ไขกลุ่ม ${g.name}`} className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+                      <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => deleteGroup(g)} aria-label={`ลบกลุ่ม ${g.name}`} className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-white hover:text-red-700 dark:hover:bg-slate-800 dark:hover:text-red-400">
+                      <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            !builder.open && <p className="text-sm text-slate-500 dark:text-slate-400">ยังไม่มีกลุ่ม — กด &quot;สร้างกลุ่มใหม่&quot; เพื่อเลือกแหล่งมารวมกัน</p>
+          )}
+        </div>
       </section>
 
       {!rangeLoaded && pendingCount === 0 ? (
@@ -376,7 +555,7 @@ export function FieldTrackerView({
                   </thead>
                   <tbody>
                     {fieldSeries.map((s) => (
-                      <tr key={s.name} className="border-b border-slate-100 dark:border-slate-800/70">
+                      <tr key={s.id} className="border-b border-slate-100 dark:border-slate-800/70">
                         <th scope="row" className="sticky left-0 bg-white px-3 py-2 text-left font-semibold text-slate-800 dark:bg-slate-950 dark:text-slate-100">
                           <span className="flex items-center gap-2 whitespace-nowrap">
                             <span aria-hidden="true" className="inline-block h-0.5 w-3 rounded" style={{ background: s.color }} />

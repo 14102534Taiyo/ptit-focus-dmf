@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldCheck, Printer, RefreshCw, Layers, Database, LineChart } from "lucide-react";
+import { ShieldCheck, Printer, RefreshCw, Layers, Database, LineChart, GitMerge } from "lucide-react";
 import { SyncManifest } from "@/types/hydrocarbon";
 
 interface HeaderProps {
@@ -117,6 +117,7 @@ export function Header({
             { id: "sales", label: "ยอดจำหน่ายและค่าภาคหลวง (Sales & Royalty)", icon: Database },
             { id: "converter", label: "แปลงหน่วยพลังงานมาตรฐาน PTIT", icon: RefreshCw },
             { id: "system", label: "ระบบ Auto-Sync (GitHub Actions ETL)", icon: ShieldCheck },
+            { id: "mapping", label: "จัดการ Mapping (ผู้ดูแล)", icon: GitMerge },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

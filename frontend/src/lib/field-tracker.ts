@@ -160,10 +160,20 @@ export function monthlySeries(
   metric: TrackerMetric,
   keyOf: KeyFn = fieldKey,
 ): (number | null)[] {
+  return monthlySeriesWhere(records, (record) => keyOf(record) === field, timeline, metric);
+}
+
+/** Same as monthlySeries but for any set of records, e.g. a viewer's own custom group. */
+export function monthlySeriesWhere(
+  records: ProductionRecord[],
+  match: (record: ProductionRecord) => boolean,
+  timeline: TimelinePoint[],
+  metric: TrackerMetric,
+): (number | null)[] {
   const column = TRACKER_METRICS[metric].column;
   const sums = new Map<string, number>();
   records.forEach((record) => {
-    if (keyOf(record) !== field) return;
+    if (!match(record)) return;
     const key = `${Number(record.ปี)}-${Number(record.ลำดับเดือน)}`;
     sums.set(key, (sums.get(key) || 0) + (Number(record[column]) || 0));
   });
