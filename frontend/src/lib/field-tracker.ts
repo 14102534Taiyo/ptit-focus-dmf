@@ -37,9 +37,44 @@ export const TRACKER_METRICS: Record<
   },
 };
 
-/** A field is identified by DMF's own field name, which is stable across years. */
+/** DMF's own field name for a record. */
 export function fieldKey(record: ProductionRecord): string {
   return String(record.แหล่ง_ไฟล์ดิบ || record.PTIT_Operator_Field || "").trim();
+}
+
+export type KeyFn = (record: ProductionRecord) => string;
+
+// ---- Field group mapping (maintained by PTIT staff in field_group_mapping.xlsx) ----
+export interface FieldGroupRow {
+  แหล่ง_ไฟล์ดิบ: string;
+  กลุ่มติดตาม: string;
+  ความสัมพันธ์: string;
+  สถานะ: string;
+  หมายเหตุ: string;
+  ปีที่พบในข้อมูล: string;
+  แปลงที่พบ: string;
+  พื้นที่: string;
+  แก้ไขล่าสุด: string;
+}
+
+export const STATUS_CONFIRMED = "ยืนยันแล้ว";
+
+/** DMF name → tracking group, for confirmed rows only (drafts are shown but never applied). */
+export function confirmedGroupLookup(rows: FieldGroupRow[]): Map<string, string> {
+  const lookup = new Map<string, string>();
+  rows.forEach((row) => {
+    if (row.สถานะ.trim() === STATUS_CONFIRMED) {
+      lookup.set(row.แหล่ง_ไฟล์ดิบ.trim(), row.กลุ่มติดตาม.trim() || row.แหล่ง_ไฟล์ดิบ.trim());
+    }
+  });
+  return lookup;
+}
+
+export function groupedKeyFn(lookup: Map<string, string>): KeyFn {
+  return (record) => {
+    const name = fieldKey(record);
+    return lookup.get(name) || name;
+  };
 }
 
 export interface FieldInfo {
@@ -80,12 +115,13 @@ export function buildFieldCatalog(
   fromYear: number,
   toYear: number,
   metric: TrackerMetric,
+  keyOf: KeyFn = fieldKey,
 ): FieldInfo[] {
   const column = TRACKER_METRICS[metric].column;
   const catalog = new Map<string, FieldInfo & { operatorSet: Set<string> }>();
   records.forEach((record) => {
     if (!inRange(record, fromYear, toYear)) return;
-    const name = fieldKey(record);
+    const name = keyOf(record);
     if (!name) return;
     const year = Number(record.ปี);
     let info = catalog.get(name);
@@ -122,11 +158,12 @@ export function monthlySeries(
   field: string,
   timeline: TimelinePoint[],
   metric: TrackerMetric,
+  keyOf: KeyFn = fieldKey,
 ): (number | null)[] {
   const column = TRACKER_METRICS[metric].column;
   const sums = new Map<string, number>();
   records.forEach((record) => {
-    if (fieldKey(record) !== field) return;
+    if (keyOf(record) !== field) return;
     const key = `${Number(record.ปี)}-${Number(record.ลำดับเดือน)}`;
     sums.set(key, (sums.get(key) || 0) + (Number(record[column]) || 0));
   });

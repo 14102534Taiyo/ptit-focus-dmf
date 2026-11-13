@@ -4,6 +4,16 @@ on:
   schedule:
     # Run daily at 04:00 UTC (11:00 AM Bangkok Time)
     - cron: '0 4 * * *'
+  # Re-run the ETL (no new downloads needed) as soon as a human-maintained master file changes
+  push:
+    branches: ["main"]
+    paths:
+      - 'field_group_mapping.xlsx'
+      - 'field_group_mapping.json'
+      - 'fang_production_master.xlsx'
+      - 'fang_production_master.json'
+      - 'master_mapping.xlsx'
+      - 'sale_master_mapping.xlsx'
   workflow_dispatch:
     inputs:
       force_refresh:

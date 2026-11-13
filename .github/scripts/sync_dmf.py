@@ -72,6 +72,10 @@ try:
     import dmf_live_stream as dmf
 except ImportError:
     dmf = None
+try:
+    import field_mapping
+except ImportError:
+    field_mapping = None
 
 # Thai Month References
 THAI_MONTHS = [
@@ -664,6 +668,11 @@ def enrich_production(df_raw_prod, df_master):
     df['PTIT_Order'] = df['PTIT_Order'].fillna(99).astype(int)
 
     df = inject_fang_to_dataframe(df)
+
+    # Tracking group across renames/splits — confirmed rows of field_group_mapping.xlsx only
+    lookup = field_mapping.confirmed_group_lookup(field_mapping.load_mapping()) if field_mapping else {}
+    names = df['แหล่ง_ไฟล์ดิบ'].fillna('').astype(str).str.strip()
+    df['กลุ่มติดตาม'] = names.map(lambda n: lookup.get(n, n))
     return df.sort_values(
         by=['ปี', 'ลำดับเดือน', 'พื้นที่', 'PTIT_Order'],
         ascending=[True, True, False, True]
@@ -849,6 +858,9 @@ def run_etl():
             write_json(target_dir / "production_master.json", prod_result)
             write_json(target_dir / "sales_master.json", sales_result)
             write_json(target_dir / YEARS_INDEX_NAME, years_index)
+            if field_mapping:
+                df_map = field_mapping.merge_with_inventory(field_mapping.load_mapping(), field_mapping.field_inventory())
+                write_json(target_dir / "field_groups.json", field_mapping.public_payload(df_map))
         except Exception as ex:
             print(f"   [WARN] Could not write JSON to {target_dir}: {ex}")
 

@@ -10,6 +10,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import dmf_live_stream as dmf
+import field_mapping as fm
 
 # ----------------------------------------------------
 # Page Configuration
@@ -2873,14 +2874,161 @@ if is_admin and tab_convert is not None:
 # ====================================================
 # TAB 2: MASTER LIST MANAGEMENT (ADMIN ONLY)
 # ====================================================
+def _field_monthly_boed(field_names):
+    """Monthly BOED per DMF field name from the per-year production cache (for the mapping preview)."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(fm.PRODUCTION_CACHE_DIR, "*.json"))):
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        cols = payload.get("columns", [])
+        if not cols:
+            continue
+        df_y = pd.DataFrame(payload["rows"], columns=cols)
+        df_y = df_y[df_y["แหล่ง_ไฟล์ดิบ"].astype(str).str.strip().isin(field_names)]
+        if not df_y.empty:
+            rows.append(df_y[["ปี", "ลำดับเดือน", "แหล่ง_ไฟล์ดิบ", "รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)"]])
+    if not rows:
+        return pd.DataFrame()
+    df = pd.concat(rows, ignore_index=True)
+    df["แหล่ง_ไฟล์ดิบ"] = df["แหล่ง_ไฟล์ดิบ"].astype(str).str.strip()
+    df = df.groupby(["ปี", "ลำดับเดือน", "แหล่ง_ไฟล์ดิบ"], as_index=False)["รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)"].sum()
+    df["งวด"] = pd.to_datetime(dict(year=df["ปี"].astype(int) - 543, month=df["ลำดับเดือน"].astype(int), day=1))
+    return df
+
+
+def render_field_group_mapping():
+    st.markdown("##### 🔀 จับคู่ชื่อแหล่งผลิตข้ามปี (Field Group Mapping)")
+    st.markdown("""
+    <div style="background: rgba(224, 242, 254, 0.6); border: 1px solid rgba(186, 230, 253, 0.9); border-radius: 12px; padding: 12px 18px; margin-bottom: 16px;">
+        <b style="color: #0369A1; font-size: 13.5px;">💡 ใช้ทำอะไร</b><br/>
+        <span style="font-size: 12.5px; color: #334155; line-height: 1.7;">
+        • DMF เปลี่ยนชื่อ สะกดต่าง รวมกลุ่ม หรือแยกแหล่งผลิตหลายครั้ง (เช่น เปลี่ยนรูปแบบรายงานปี 2559 และเปลี่ยนสัมปทานปี 2565–2566)<br/>
+        • กำหนด <b>"กลุ่มติดตาม"</b> ให้ชื่อแหล่งที่ควรนับต่อเนื่องกัน — ชื่อที่อยู่กลุ่มเดียวกันจะถูก<b>รวมเป็นเส้นเดียว</b>ในหน้า Field Tracker บนเว็บ และเพิ่มคอลัมน์ <code>กลุ่มติดตาม</code> ในไฟล์ Excel รวมทุกปี<br/>
+        • ระบบใช้เฉพาะแถวที่ <b>สถานะ = ยืนยันแล้ว</b> · แถว <b>ร่าง</b> จะแสดงบนเว็บเป็นข้อเสนอ แต่ยังไม่ถูกนำไปคำนวณ<br/>
+        • ชื่อแหล่งใหม่ที่ DMF เพิ่งรายงานจะถูกเพิ่มเข้าตารางเป็นสถานะ "ร่าง" ให้อัตโนมัติ<br/>
+        • บันทึกแล้วให้ commit/push ไฟล์ <code>field_group_mapping.xlsx</code> ขึ้น GitHub — ระบบซิงก์จะอัปเดตเว็บให้ภายในไม่กี่นาที
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    inventory = fm.field_inventory()
+    if not inventory:
+        st.warning("ไม่พบข้อมูลแคชรายปีใน `data/cache/production/` — กรุณา `git pull` เพื่อดึงข้อมูลล่าสุดจาก GitHub ก่อน")
+        return
+
+    df_saved = fm.load_mapping()
+    df_map = fm.merge_with_inventory(df_saved, inventory)
+
+    n_new = len(set(inventory) - set(df_saved[fm.COL_FIELD]))
+    n_draft = int((df_map[fm.COL_STATUS] != fm.STATUS_CONFIRMED).sum())
+    group_sizes = df_map[df_map[fm.COL_STATUS] == fm.STATUS_CONFIRMED].groupby(fm.COL_GROUP)[fm.COL_FIELD].count()
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("ชื่อแหล่งตาม DMF", len(df_map))
+    c2.metric("รอตรวจ (ร่าง)", n_draft)
+    c3.metric("กลุ่มที่รวมหลายชื่อ (ยืนยันแล้ว)", int((group_sizes > 1).sum()))
+    c4.metric("ชื่อใหม่ที่ยังไม่อยู่ในไฟล์", n_new)
+
+    f1, f2 = st.columns([2, 1])
+    with f1:
+        q = st.text_input("🔎 ค้นหาชื่อแหล่ง / กลุ่ม / แปลง:", key="fgm_search")
+    with f2:
+        status_filter = st.selectbox("สถานะ:", ["ทั้งหมด"] + fm.STATUS_OPTIONS, key="fgm_status")
+
+    view = df_map
+    if q.strip():
+        needle = q.strip().lower()
+        view = view[view[[fm.COL_FIELD, fm.COL_GROUP, fm.COL_BLOCKS]].apply(
+            lambda r: any(needle in str(v).lower() for v in r), axis=1)]
+    if status_filter != "ทั้งหมด":
+        view = view[view[fm.COL_STATUS] == status_filter]
+
+    group_counts = df_map.groupby(fm.COL_GROUP)[fm.COL_FIELD].count()
+    shared_groups = sorted(group_counts[group_counts > 1].index)
+    edited = st.data_editor(
+        view,
+        column_config={
+            fm.COL_FIELD: st.column_config.TextColumn("ชื่อแหล่งตาม DMF", disabled=True, width="medium"),
+            fm.COL_GROUP: st.column_config.TextColumn(
+                "กลุ่มติดตาม ✏️", width="large",
+                help="พิมพ์ชื่อกลุ่มเดียวกันให้ทุกชื่อแหล่งที่ต้องการนับต่อเนื่องกัน (ปล่อยว่าง = ใช้ชื่อเดิม)"),
+            fm.COL_RELATION: st.column_config.SelectboxColumn("ความสัมพันธ์ ✏️", options=fm.RELATION_OPTIONS, width="medium"),
+            fm.COL_STATUS: st.column_config.SelectboxColumn("สถานะ ✏️", options=fm.STATUS_OPTIONS, width="small", required=True),
+            fm.COL_NOTE: st.column_config.TextColumn("หมายเหตุสำหรับผู้ใช้ข้อมูล ✏️", width="large"),
+            fm.COL_YEARS: st.column_config.TextColumn("ปีที่พบในข้อมูล", disabled=True),
+            fm.COL_BLOCKS: st.column_config.TextColumn("แปลงที่พบ", disabled=True),
+            fm.COL_AREA: st.column_config.TextColumn("พื้นที่", disabled=True, width="small"),
+            fm.COL_UPDATED: st.column_config.TextColumn("แก้ไขล่าสุด", disabled=True, width="small"),
+        },
+        hide_index=True,
+        use_container_width=True,
+        height=520,
+        num_rows="fixed",
+        key="fgm_editor",
+    )
+    if shared_groups:
+        st.caption("กลุ่มที่รวมหลายชื่ออยู่แล้ว (คัดลอกชื่อไปใช้ให้ตรงกัน): " + " · ".join(shared_groups))
+
+    b1, b2, b3 = st.columns([1.4, 1.4, 2])
+    with b1:
+        if st.button("💾 บันทึกตาราง Mapping", type="primary", use_container_width=True, key="btn_save_fgm"):
+            merged = df_map.set_index(fm.COL_FIELD)
+            merged.update(edited.set_index(fm.COL_FIELD)[[fm.COL_GROUP, fm.COL_RELATION, fm.COL_STATUS, fm.COL_NOTE]])
+            fm.save_mapping(merged.reset_index(), previous=df_saved)
+            st.success("บันทึก `field_group_mapping.xlsx` และ `.json` แล้ว — อย่าลืม commit/push ขึ้น GitHub เพื่ออัปเดตเว็บ")
+            st.rerun()
+    with b2:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            df_map.to_excel(writer, sheet_name="Field_Group_Mapping", index=False)
+        st.download_button("📥 ดาวน์โหลด Excel", data=buf.getvalue(), file_name="field_group_mapping.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, key="btn_dl_fgm")
+    with b3:
+        st.caption("📁 ไฟล์: `field_group_mapping.xlsx` (แก้ไขด้วย Excel ได้เช่นกัน) · ใช้เฉพาะแถว 'ยืนยันแล้ว'")
+
+    # Preview a group to check that the combined line is continuous before confirming it
+    st.markdown("---")
+    st.markdown("##### 📈 ตรวจสอบกลุ่มก่อนยืนยัน")
+    multi_groups = (
+        df_map.groupby(fm.COL_GROUP)[fm.COL_FIELD].apply(list)
+    )
+    multi_groups = multi_groups[multi_groups.map(len) > 1]
+    if multi_groups.empty:
+        st.caption("ยังไม่มีกลุ่มที่รวมหลายชื่อแหล่ง")
+        return
+    sel_group = st.selectbox("เลือกกลุ่ม:", list(multi_groups.index), key="fgm_preview_group")
+    members = multi_groups[sel_group]
+    status_by_field = df_map.set_index(fm.COL_FIELD)[fm.COL_STATUS]
+    st.caption("สมาชิก: " + " · ".join(f"{m} ({status_by_field.get(m, '')})" for m in members))
+    df_prev = _field_monthly_boed(members)
+    if df_prev.empty:
+        st.info("ไม่พบข้อมูลการผลิตของสมาชิกในกลุ่มนี้")
+        return
+    total = df_prev.groupby("งวด", as_index=False)["รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)"].sum()
+    fig = go.Figure()
+    for name, part in df_prev.groupby("แหล่ง_ไฟล์ดิบ"):
+        fig.add_trace(go.Scatter(x=part["งวด"], y=part["รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)"], mode="lines",
+                                 name=name, stackgroup="members", line=dict(width=1)))
+    fig.add_trace(go.Scatter(x=total["งวด"], y=total["รวมเทียบเท่าน้ำมันดิบ (บาร์เรล/วัน)"], mode="lines",
+                             name=f"รวมกลุ่ม: {sel_group}", line=dict(color="#0F172A", width=2.5)))
+    fig.update_layout(height=420, yaxis_title="BOED", hovermode="x unified",
+                      legend=dict(orientation="h", y=-0.2), margin=dict(l=10, r=10, t=30, b=10))
+    st.plotly_chart(apply_crystal_aqua_theme(fig), use_container_width=True)
+    st.caption("พื้นที่ซ้อน = ส่วนของแต่ละชื่อแหล่ง · เส้นดำ = ผลรวมกลุ่ม ถ้าเส้นรวมต่อเนื่องไม่กระโดดผิดปกติ แปลว่าการจับคู่น่าจะถูกต้อง")
+
+
 def render_production_master():
     st.subheader("🏷️ จัดการ Master Data Model & ฐานข้อมูลแหล่งฝาง (Admin)")
     st.caption("จัดการโครงสร้างข้อมูล Master Mapping สำหรับ DMF และบันทึกค่าน้ำมันดิบแหล่งฝาง (DEDP) ประจำแต่ละเดือน")
 
-    subtab_dmf_m, subtab_fang_m = st.tabs([
+    subtab_dmf_m, subtab_fang_m, subtab_group_m = st.tabs([
         "📑 1. Master Mapping กรมเชื้อเพลิงฯ (DMF)",
-        "🛢️ 2. ค่าน้ำมันดิบ แหล่งฝาง รายเดือน (Fang - DEDP)"
+        "🛢️ 2. ค่าน้ำมันดิบ แหล่งฝาง รายเดือน (Fang - DEDP)",
+        "🔀 3. จับคู่แหล่งข้ามปี (Field Group Mapping)"
     ])
+
+    with subtab_group_m:
+        render_field_group_mapping()
 
     with subtab_dmf_m:
         st.markdown("##### 📋 ตาราง Master Mapping สำหรับเชื่อมโยงข้อมูล DMF")

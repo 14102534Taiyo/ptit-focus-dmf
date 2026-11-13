@@ -5,14 +5,19 @@ import { Download, Loader2, Plus, Search, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { ProductionRecord } from "@/types/hydrocarbon";
 import {
+  FieldGroupRow,
   TRACKER_METRICS,
   TrackerMetric,
   annualSeries,
   buildFieldCatalog,
   buildTimeline,
+  confirmedGroupLookup,
+  fieldKey,
+  groupedKeyFn,
   monthlySeries,
 } from "@/lib/field-tracker";
 import { FieldTrendChart, TrendPoint } from "@/components/FieldTrendChart";
+import { FieldMappingReference } from "@/components/FieldMappingReference";
 import { formatInteger, formatNumber } from "@/lib/utils";
 
 // Categorical slots 1–4 (validated light/dark steps); color follows the field, never its rank
@@ -30,6 +35,8 @@ interface FieldTrackerViewProps {
   loadedYears: Set<number>;
   pendingCount: number;
   theme: "light" | "dark";
+  mappingRows: FieldGroupRow[];
+  mappingGenerated?: string;
 }
 
 export function FieldTrackerView({
@@ -39,6 +46,8 @@ export function FieldTrackerView({
   loadedYears,
   pendingCount,
   theme,
+  mappingRows,
+  mappingGenerated,
 }: FieldTrackerViewProps) {
   const years = useMemo(
     () => Object.keys(monthsIndex).map(Number).filter(Number.isFinite).sort((a, b) => a - b),
@@ -53,6 +62,24 @@ export function FieldTrackerView({
   // Slot per field, kept for as long as the field stays selected
   const [slots, setSlots] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
+  const [useGroups, setUseGroups] = useState(true);
+  const [needsDefault, setNeedsDefault] = useState(true);
+
+  const groupLookup = useMemo(() => confirmedGroupLookup(mappingRows), [mappingRows]);
+  const keyOf = useMemo(() => (useGroups ? groupedKeyFn(groupLookup) : fieldKey), [useGroups, groupLookup]);
+  // Members of each confirmed multi-name group, for chip tooltips and labels
+  const groupMembers = useMemo(() => {
+    const members = new Map<string, string[]>();
+    groupLookup.forEach((group, name) => members.set(group, [...(members.get(group) || []), name]));
+    return members;
+  }, [groupLookup]);
+  const isMergedGroup = (name: string) => useGroups && (groupMembers.get(name)?.length || 0) > 1;
+
+  const toggleGroups = (value: boolean) => {
+    setUseGroups(value);
+    setSelected([]);
+    setNeedsDefault(true);
+  };
 
   const rangeYears = useMemo(() => years.filter((y) => y >= fromYear && y <= toYear), [years, fromYear, toYear]);
   useEffect(() => {
@@ -61,8 +88,8 @@ export function FieldTrackerView({
   const rangeLoaded = rangeYears.every((y) => loadedYears.has(y));
 
   const catalog = useMemo(
-    () => (rangeLoaded ? buildFieldCatalog(records, fromYear, toYear, metric) : []),
-    [records, fromYear, toYear, metric, rangeLoaded],
+    () => (rangeLoaded ? buildFieldCatalog(records, fromYear, toYear, metric, keyOf) : []),
+    [records, fromYear, toYear, metric, rangeLoaded, keyOf],
   );
 
   const addField = (name: string) => {
@@ -77,13 +104,13 @@ export function FieldTrackerView({
 
   // Start with the three largest fields of the range so the page is never empty
   useEffect(() => {
-    if (selected.length === 0 && catalog.length > 0) {
+    if (needsDefault && catalog.length > 0) {
       const initial = catalog.slice(0, 3).map((f) => f.name);
       setSlots(Object.fromEntries(initial.map((name, index) => [name, index])));
       setSelected(initial);
+      setNeedsDefault(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog.length > 0]);
+  }, [needsDefault, catalog]);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -101,10 +128,10 @@ export function FieldTrackerView({
   const fieldSeries = useMemo(
     () =>
       selected.map((name) => {
-        const monthly = monthlySeries(records, name, timeline, metric);
+        const monthly = monthlySeries(records, name, timeline, metric, keyOf);
         return { name, color: palette[slots[name] ?? 0], monthly, annual: annualSeries(monthly, timeline) };
       }),
-    [selected, records, timeline, metric, palette, slots],
+    [selected, records, timeline, metric, palette, slots, keyOf],
   );
 
   const chartPoints: TrendPoint[] =
@@ -199,15 +226,30 @@ export function FieldTrackerView({
             เฉลี่ยรายปี
           </button>
         </div>
+        <div role="group" aria-label="การรวมชื่อแหล่ง" className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
+          <button type="button" aria-pressed={useGroups} onClick={() => toggleGroups(true)} className={segmentClass(useGroups)}>
+            รวมตาม Mapping
+          </button>
+          <button type="button" aria-pressed={!useGroups} onClick={() => toggleGroups(false)} className={segmentClass(!useGroups)}>
+            ชื่อตาม DMF
+          </button>
+        </div>
       </section>
 
       {/* Field picker */}
       <section aria-label="เลือกแหล่งผลิต" className="glass-panel space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
           {fieldSeries.map((s) => (
-            <span key={s.name} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-1 text-sm font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+            <span
+              key={s.name}
+              title={isMergedGroup(s.name) ? `รวม: ${groupMembers.get(s.name)?.join(", ")}` : undefined}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white pl-3 pr-1 text-sm font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
               <span aria-hidden="true" className="inline-block h-0.5 w-4 rounded" style={{ background: s.color }} />
               {s.name}
+              {isMergedGroup(s.name) && (
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">({groupMembers.get(s.name)?.length} ชื่อ)</span>
+              )}
               <button
                 type="button"
                 onClick={() => removeField(s.name)}
@@ -237,7 +279,9 @@ export function FieldTrackerView({
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          ชื่อแหล่งตามรายงาน DMF · บางแหล่งเปลี่ยนชื่อหรือแยกย่อยเมื่อเปลี่ยนสัมปทาน (เช่น กลุ่มเอราวัณ+ → เอราวัณ / ปลาทอง / ฟูนาน / สตูล ภายใต้ G1/61 และ บงกช → G2N / G2S ภายใต้ G2/61 ตั้งแต่ปี 2565–2566) จึงต้องเลือกทั้งชื่อเดิมและชื่อใหม่เพื่อดูต่อเนื่อง
+          {useGroups
+            ? "รวมตาม Mapping: ชื่อแหล่งที่ทีม PTIT ยืนยันว่าเป็นกลุ่มเดียวกัน (เปลี่ยนชื่อ/สะกดต่าง/รวม/แยกเมื่อเปลี่ยนสัมปทาน) จะแสดงเป็นเส้นเดียว · ดูรายละเอียดในตาราง Mapping ด้านล่าง"
+            : "ชื่อตาม DMF: แสดงตามชื่อที่ DMF รายงานในแต่ละปี — บางแหล่งเปลี่ยนชื่อหรือแยกย่อยเมื่อเปลี่ยนสัมปทาน (เช่น ปี 2559 และ 2565–2566) เส้นจึงอาจขาดช่วง"}
         </p>
 
         {selected.length < MAX_FIELDS && rangeLoaded && (
@@ -247,7 +291,7 @@ export function FieldTrackerView({
                 key={f.name}
                 type="button"
                 onClick={() => addField(f.name)}
-                title={`${f.operators.join(", ") || "ยังไม่ระบุผู้ดำเนินการ"} · มีข้อมูลปี ${f.firstYear}–${f.lastYear}`}
+                title={`${isMergedGroup(f.name) ? `รวม: ${groupMembers.get(f.name)?.join(", ")} · ` : ""}${f.operators.join(", ") || "ยังไม่ระบุผู้ดำเนินการ"} · มีข้อมูลปี ${f.firstYear}–${f.lastYear}`}
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-dashed border-slate-300 px-3 text-sm text-slate-700 hover:border-sky-500 hover:text-sky-800 dark:border-slate-700 dark:text-slate-300 dark:hover:text-sky-300"
               >
                 <Plus aria-hidden="true" className="h-3.5 w-3.5" />
@@ -354,6 +398,8 @@ export function FieldTrackerView({
           )}
         </>
       )}
+
+      <FieldMappingReference rows={mappingRows} generated={mappingGenerated} />
     </div>
   );
 }

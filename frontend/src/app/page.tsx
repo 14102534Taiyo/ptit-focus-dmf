@@ -13,6 +13,8 @@ import prodDataRaw from "../../public/data/production_master.json";
 import salesDataRaw from "../../public/data/sales_master.json";
 import manifestRaw from "../../public/data/sync_manifest.json";
 import yearsIndexRaw from "../../public/data/years_index.json";
+import fieldGroupsRaw from "../../public/data/field_groups.json";
+import { FieldGroupRow } from "@/lib/field-tracker";
 import {
   ProductionMasterData,
   ProductionRecord,
@@ -26,6 +28,7 @@ const prodBase = prodDataRaw as unknown as ProductionMasterData;
 const salesBase = salesDataRaw as unknown as SalesMasterData;
 const manifest = manifestRaw as unknown as SyncManifest;
 const yearsIndex = yearsIndexRaw as unknown as YearsIndex;
+const fieldGroups = fieldGroupsRaw as unknown as { generated?: string; rows: FieldGroupRow[] };
 const productionYears = yearsFromIndex(yearsIndex, "production");
 const salesYears = yearsFromIndex(yearsIndex, "sales");
 
@@ -91,6 +94,8 @@ export default function Home() {
             loadedYears={prodYears.loadedYears}
             pendingCount={prodYears.pendingCount}
             theme={theme}
+            mappingRows={fieldGroups.rows}
+            mappingGenerated={fieldGroups.generated}
           />
         )}
 
