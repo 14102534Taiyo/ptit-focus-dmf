@@ -156,6 +156,7 @@ export function AnalystStudioView({
   // Step 3
   const [transpose, setTranspose] = useState(false);
   const [showTotal, setShowTotal] = useState(true);
+  const [chartType, setChartType] = useState<"line" | "stacked">("line");
 
   const mappingLookup = useMemo(() => confirmedGroupLookup(mappingRows), [mappingRows]);
   const palette = SERIES_COLORS[theme];
@@ -420,7 +421,16 @@ export function AnalystStudioView({
 
   // Total of every group in the table (same as the "รวมทุกกลุ่ม" row), drawn as a heavier neutral line
   const totalColor = theme === "dark" ? "#e2e8f0" : "#1e293b";
-  const canShowTotal = groups.length > 1;
+  const canShowTotal = groups.length > 1 && chartType === "line";
+  // Stacked: groups not drawn fold into a neutral "อื่นๆ" band so the stack top equals the table total
+  const hiddenGroups = pivot.rows.filter((r) => !shown.includes(r.group));
+  if (chartType === "stacked" && hiddenGroups.length > 0 && chartSeries.length > 0) {
+    chartSeries.push({
+      name: `อื่นๆ (${hiddenGroups.length} กลุ่ม)`,
+      color: theme === "dark" ? "#6b7280" : "#a3a3a3",
+      values: sumSeries(hiddenGroups.map((r) => r.values), pivot.periods.length),
+    });
+  }
   if (showTotal && canShowTotal) {
     chartSeries.unshift({ name: "รวม (Total)", color: totalColor, values: pivot.total, emphasis: true } as (typeof chartSeries)[number]);
   }
@@ -866,18 +876,25 @@ export function AnalystStudioView({
                   </li>
                 ))}
               </ul>
+              <div className="flex flex-wrap items-center gap-3">
+              <div role="group" aria-label="รูปแบบกราฟ" className={segWrap}>
+                <button type="button" aria-pressed={chartType === "line"} onClick={() => setChartType("line")} className={segBtn(chartType === "line")}>เส้น</button>
+                <button type="button" aria-pressed={chartType === "stacked"} onClick={() => setChartType("stacked")} className={segBtn(chartType === "stacked")}>พื้นที่ซ้อน (Stacked)</button>
+              </div>
               {canShowTotal && (
                 <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                   <input type="checkbox" checked={showTotal} onChange={(e) => setShowTotal(e.target.checked)} className="h-5 w-5 accent-sky-700" />
                   แสดงเส้นรวมทุกกลุ่ม (Total)
                 </label>
               )}
+              </div>
             </div>
             <FieldTrendChart
               points={pivot.periods.map((p) => ({ year: p.year, month: p.month }))}
               series={chartSeries}
               unit={unit}
               decimals={decimals}
+              variant={chartType}
             />
           </div>
         ) : (

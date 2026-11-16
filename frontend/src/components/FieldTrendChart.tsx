@@ -24,6 +24,8 @@ interface FieldTrendChartProps {
   series: TrendSeries[];
   unit: string;
   decimals: number;
+  /** "stacked": filled areas stacked bottom→top in series order; the top edge is the sum */
+  variant?: "line" | "stacked";
 }
 
 const HEIGHT = 340;
@@ -54,7 +56,8 @@ function pointLabel(point: TrendPoint) {
 }
 
 /** Multi-series line chart: one line per field, gaps where a field has no DMF row. */
-export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendChartProps) {
+export function FieldTrendChart({ points, series, unit, decimals, variant = "line" }: FieldTrendChartProps) {
+  const stacked = variant === "stacked";
   const { ref, width } = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const narrow = width < 560;
@@ -62,10 +65,26 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
   const plotW = Math.max(width - pad.left - pad.right, 10);
   const plotH = HEIGHT - pad.top - pad.bottom;
 
+  // Per-index stack sums (null where no series reported) — used for the stacked y-scale and tooltip total
+  const stackTotals = useMemo(
+    () =>
+      points.map((_, i): number | null => {
+        let total = null as number | null;
+        series.forEach((s) => {
+          const v = s.values[i];
+          if (v !== null && v !== undefined) total = (total ?? 0) + v;
+        });
+        return total;
+      }),
+    [points, series],
+  );
+
   const yMax = useMemo(() => {
-    const max = Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null)));
+    const max = stacked
+      ? Math.max(0, ...stackTotals.filter((v): v is number => v !== null))
+      : Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null)));
     return niceMax(max * 1.05);
-  }, [series]);
+  }, [series, stacked, stackTotals]);
 
   const x = (index: number) =>
     pad.left + (points.length > 1 ? (index / (points.length - 1)) * plotW : plotW / 2);
@@ -80,6 +99,30 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
     const step = Math.ceil(firsts.length / maxLabels);
     return firsts.filter((_, i) => i % step === 0);
   }, [points, plotW]);
+
+  // Stacked areas: one closed polygon per contiguous run of reported months (gaps stay empty)
+  const areas = !stacked
+    ? []
+    : (() => {
+        const base = new Array(points.length).fill(0);
+        const active = stackTotals.map((t) => t !== null);
+        return series.map((s) => {
+          const lower = [...base];
+          const upper = base.map((b, i) => b + (s.values[i] ?? 0));
+          upper.forEach((u, i) => (base[i] = u));
+          let d = "";
+          for (let i = 0; i < points.length; i++) {
+            if (!active[i]) continue;
+            let j = i;
+            while (j + 1 < points.length && active[j + 1]) j++;
+            for (let k = i; k <= j; k++) d += `${k === i ? "M" : "L"}${x(k).toFixed(1)},${y(upper[k]).toFixed(1)}`;
+            for (let k = j; k >= i; k--) d += `L${x(k).toFixed(1)},${y(lower[k]).toFixed(1)}`;
+            d += "Z";
+            i = j;
+          }
+          return { name: s.name, color: s.color, d };
+        });
+      })();
 
   const paths = series.map((s) => {
     let d = "";
@@ -144,11 +187,16 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
             </g>
           ))}
 
-          {paths.map((p) => (
+          {stacked &&
+            areas.map((a) => (
+              <path key={a.name} d={a.d} fill={a.color} fillOpacity={0.88} className="stroke-white dark:stroke-slate-950" strokeWidth={1} strokeLinejoin="round" />
+            ))}
+
+          {!stacked && paths.map((p) => (
             <path key={p.name} d={p.d} fill="none" stroke={p.color} strokeWidth={p.emphasis ? 3.5 : 2} strokeLinejoin="round" strokeLinecap="round" />
           ))}
 
-          {!narrow &&
+          {!narrow && !stacked &&
             endLabels.map((label) => (
               <g key={label.name}>
                 <line x1={label.x + 4} x2={label.x + 12} y1={label.ty} y2={label.ty} stroke={label.color} strokeWidth={2} />
@@ -161,7 +209,7 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
           {hover !== null && (
             <g pointerEvents="none">
               <line x1={hoverX} x2={hoverX} y1={pad.top} y2={pad.top + plotH} className="stroke-slate-400 dark:stroke-slate-500" strokeWidth={1} />
-              {paths.map((p) => {
+              {!stacked && paths.map((p) => {
                 const value = p.values[hover];
                 return value === null ? null : (
                   <circle key={p.name} cx={hoverX} cy={y(value)} r={4.5} fill={p.color} className="stroke-white dark:stroke-slate-950" strokeWidth={2} />
@@ -189,7 +237,7 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
           style={tooltipLeft ? { right: width - hoverX + 12 } : { left: hoverX + 12 }}
         >
           <div className="mb-1 font-semibold text-slate-500 dark:text-slate-400">{pointLabel(points[hover])}</div>
-          {series.map((s) => {
+          {(stacked ? [...series].reverse() : series).map((s) => {
             const value = s.values[hover];
             return (
               <div key={s.name} className="flex items-center justify-between gap-3 py-0.5">
@@ -203,6 +251,14 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
               </div>
             );
           })}
+          {stacked && (
+            <div className="mt-1 flex items-center justify-between gap-3 border-t border-slate-200 pt-1 dark:border-slate-700">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">รวม</span>
+              <span className="font-black tabular-nums text-slate-900 dark:text-white">
+                {stackTotals[hover] === null ? "ไม่มีรายงาน" : `${fmt(stackTotals[hover] as number)} ${unit}`}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
