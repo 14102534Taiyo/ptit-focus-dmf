@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-11-15T11:52:27.572227",
-  "execution_duration_sec": 282.28,
+  "timestamp": "2026-11-16T07:22:20.913328",
+  "execution_duration_sec": 232.16,
   "status": "success",
   "is_live_dmf": true,
-  "production_records": 313,
-  "sales_records": 629,
+  "production_records": 346,
+  "sales_records": 627,
   "production_years": 24,
   "sales_years": 24,
-  "production_records_all_years": 11830,
-  "sales_records_all_years": 26751,
-  "latest_production_month": "กันยายน",
-  "checksum_prod": "756b130baa861786fc319d32afc4fc49",
-  "checksum_sale": "451c0f87f8a184c4aa5442dcff764fb9"
+  "production_records_all_years": 11863,
+  "sales_records_all_years": 26749,
+  "latest_production_month": "ตุลาคม",
+  "checksum_prod": "6d06660be4a47035df88aa12661dec02",
+  "checksum_sale": "2b62c2766ec94839b88bc691e696baac"
 }
