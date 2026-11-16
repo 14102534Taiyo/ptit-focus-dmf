@@ -9,6 +9,8 @@ export interface TrendSeries {
   name: string;
   color: string;
   values: (number | null)[];
+  /** Drawn heavier, e.g. a total line */
+  emphasis?: boolean;
 }
 
 export interface TrendPoint {
@@ -143,7 +145,7 @@ export function FieldTrendChart({ points, series, unit, decimals }: FieldTrendCh
           ))}
 
           {paths.map((p) => (
-            <path key={p.name} d={p.d} fill="none" stroke={p.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path key={p.name} d={p.d} fill="none" stroke={p.color} strokeWidth={p.emphasis ? 3.5 : 2} strokeLinejoin="round" strokeLinecap="round" />
           ))}
 
           {!narrow &&

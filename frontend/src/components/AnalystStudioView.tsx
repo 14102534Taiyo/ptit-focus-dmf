@@ -155,6 +155,7 @@ export function AnalystStudioView({
 
   // Step 3
   const [transpose, setTranspose] = useState(false);
+  const [showTotal, setShowTotal] = useState(true);
 
   const mappingLookup = useMemo(() => confirmedGroupLookup(mappingRows), [mappingRows]);
   const palette = SERIES_COLORS[theme];
@@ -411,11 +412,18 @@ export function AnalystStudioView({
   const chartSeries = shown
     .map((group, slot) => ({ group, slot }))
     .filter(({ group }) => group && groups.includes(group))
-    .map(({ group, slot }) => ({
+    .map(({ group, slot }): { name: string; color: string; values: (number | null)[]; emphasis?: boolean } => ({
       name: group,
       color: palette[slot],
       values: pivot.rows.find((r) => r.group === group)?.values || [],
     }));
+
+  // Total of every group in the table (same as the "รวมทุกกลุ่ม" row), drawn as a heavier neutral line
+  const totalColor = theme === "dark" ? "#e2e8f0" : "#1e293b";
+  const canShowTotal = groups.length > 1;
+  if (showTotal && canShowTotal) {
+    chartSeries.unshift({ name: "รวม (Total)", color: totalColor, values: pivot.total, emphasis: true } as (typeof chartSeries)[number]);
+  }
 
   const shareCurrent = async () => {
     if (!assign) return;
@@ -849,14 +857,22 @@ export function AnalystStudioView({
 
         {chartSeries.length > 0 ? (
           <div>
-            <ul aria-label="คำอธิบายเส้นกราฟ" className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700 dark:text-slate-300">
-              {chartSeries.map((s) => (
-                <li key={s.name} className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="inline-block h-0.5 w-4 rounded" style={{ background: s.color }} />
-                  {s.name}
-                </li>
-              ))}
-            </ul>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <ul aria-label="คำอธิบายเส้นกราฟ" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700 dark:text-slate-300">
+                {chartSeries.map((s) => (
+                  <li key={s.name} className={`flex items-center gap-1.5 ${s.emphasis ? "font-bold text-slate-900 dark:text-white" : ""}`}>
+                    <span aria-hidden="true" className={`inline-block w-4 rounded ${s.emphasis ? "h-1" : "h-0.5"}`} style={{ background: s.color }} />
+                    {s.name}
+                  </li>
+                ))}
+              </ul>
+              {canShowTotal && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <input type="checkbox" checked={showTotal} onChange={(e) => setShowTotal(e.target.checked)} className="h-5 w-5 accent-sky-700" />
+                  แสดงเส้นรวมทุกกลุ่ม (Total)
+                </label>
+              )}
+            </div>
             <FieldTrendChart
               points={pivot.periods.map((p) => ({ year: p.year, month: p.month }))}
               series={chartSeries}
