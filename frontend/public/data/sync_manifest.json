@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-11-27T13:37:17.074899",
-  "execution_duration_sec": 252.05,
+  "timestamp": "2026-11-28T12:50:04.483832",
+  "execution_duration_sec": 254.89,
   "status": "success",
   "is_live_dmf": true,
   "production_records": 346,
@@ -10,6 +10,6 @@
   "production_records_all_years": 11863,
   "sales_records_all_years": 26749,
   "latest_production_month": "ตุลาคม",
-  "checksum_prod": "19b3398a4a3c17276590563ec63483fd",
-  "checksum_sale": "9929186f2a671f0582613fc2e8fb6164"
+  "checksum_prod": "be10034b63b788922b5c72295a0f7cc4",
+  "checksum_sale": "2b83e9c285cbed6720b0794b36e84b3b"
 }
